@@ -26,12 +26,12 @@ config_list = [
             {
                 "img_name": "jipo.png",
                 "region": [314, 108, 451, 207],
-                "confidence": 0.8
+                "confidence": 0.7
             },
             {
                 "img_name": "sure_btn.png",
-                "region": [153, 975, 224, 1020],
-                "confidence": 0.8
+                "region": [28, 873, 469, 1080],
+                "confidence": 0.7
             }
         ]
     },
