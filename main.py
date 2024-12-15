@@ -1325,14 +1325,14 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                             save_png_path = save_png_dir + "/" + anchor_name + "-%Y-%m-%d-%H-%M-%S.png"
 
                                             command = [
-                                                "-c:v", "copy",
-                                                "-c:a", "copy",
-                                                "-map", "0",
-                                                "-f", "segment",
-                                                "-segment_time", split_time,
-                                                "-segment_format", 'mpegts',
-                                                "-reset_timestamps", "1",
-                                                save_file_path,
+                                                # "-c:v", "copy",
+                                                # "-c:a", "copy",
+                                                # "-map", "0",
+                                                # "-f", "segment",
+                                                # "-segment_time", split_time,
+                                                # "-segment_format", 'mpegts',
+                                                # "-reset_timestamps", "1",
+                                                # save_file_path,
 
                                                 "-f", "image2",
                                                 # 使用-q:v 参数设置视频的质量等级。 质量等级的范围是0-51，其中0 表示无损压缩，51 表示最低质量
