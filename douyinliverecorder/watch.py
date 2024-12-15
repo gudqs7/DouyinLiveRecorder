@@ -180,11 +180,11 @@ class Handler(FileSystemEventHandler):
 
                 for config in config_list:
                     out = config["out"]
-                    out_right_path = f'{script_path}/downloads/{out}'
+                    author_name = self.anchor_name
                     wait_time_sec = config["wait_time_sec"]
                     hit_config = config["hit_config"]
                     search_img_list = config["search_img_list"]
-                    hit_timestamp = hit_config.get(self.anchor_name, 0)
+                    hit_timestamp = hit_config.get(author_name, 0)
 
                     time_pass = time.time() - hit_timestamp
                     if hit_timestamp != 0 and time_pass < wait_time_sec:
@@ -200,15 +200,12 @@ class Handler(FileSystemEventHandler):
 
                     if all_right:
                         print('识别到指定截图！！ ' + old_path)
-                        hit_config[self.anchor_name] = time.time()
+                        hit_config[author_name] = time.time()
 
                         # 复制图片
-                        old_dir = os.path.dirname(old_path).replace('/', os.path.sep)
-                        down_path = os.path.join(script_path, 'downloads').replace('/', os.path.sep)
-                        author_path = old_dir.replace(down_path, '')
-                        out_path = f'{out_right_path}/{author_path}'
-                        out_path = out_path.replace(os.path.sep + 'pngs', '')
-                        out_path = out_path.replace(os.path.sep + '抖音直播', '')
+                        now_time_str = time.strftime('%Y-%m-%d')
+                        out_path = f'{script_path}/downloads/{out}/{now_time_str}/{author_name}'
+
                         if not os.path.exists(out_path):
                             os.makedirs(out_path)
 

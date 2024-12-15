@@ -1322,7 +1322,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 shutil.rmtree(save_png_dir)
                                             if not os.path.exists(save_png_dir):
                                                 os.makedirs(save_png_dir)
-                                            save_png_path = save_png_dir + "/" + anchor_name + "-%Y-%m-%d-%H-%M-%S.png"
+                                            save_png_path = save_png_dir + "/" + "%Y-%m-%d   %H_%M_%S_" + anchor_name + ".png"
 
                                             command = [
                                                 # "-c:v", "copy",
