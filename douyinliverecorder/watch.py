@@ -10,11 +10,8 @@ from watchdog.events import FileSystemEventHandler
 from pyautogui import locate
 import pyautogui as auto
 
-# from douyinliverecorder.utils import logger
-
 script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
 
-# out_right_path = f'{script_path}/downloads/results'
 temp_dir_path = f'{script_path}/downloads/temp'
 
 config_list = [
@@ -84,16 +81,8 @@ config_list = [
     },
 ]
 
-# need_image_region = [312, 115, 500, 246]
-# need_image_region = [1240, 422, 1606, 697]
-
-need_image_dir = f'{script_path}/search'
-
-# 跳过 5分钟
-# wait_time_sec = 60 * 5
-# wait_time_sec = 30
-# hit_timestamp = time.time() - wait_time_sec - 1
-
+if os.path.exists(temp_dir_path):
+    shutil.rmtree(temp_dir_path)
 if not os.path.exists(temp_dir_path):
     os.makedirs(temp_dir_path)
 
@@ -125,7 +114,7 @@ def check(search_img, new_path):
     confidence = search_img["confidence"]
     # 遍历目录
     has_any_right = False
-    directory = Path(f'{need_image_dir}/{img_name}')
+    directory = Path(f'{script_path}/search/{img_name}')
     for file_path in directory.rglob('*'):
         if file_path.is_file():
             ret_val = locate_0(str(file_path), new_path, region, confidence)
