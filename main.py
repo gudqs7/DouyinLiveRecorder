@@ -1347,7 +1347,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                             # 监控输出目录
                                             threading.Thread(
                                                 target=watch_pngs,
-                                                args=(save_png_dir, True),
+                                                args=(save_png_dir, anchor_name),
                                                 daemon=True
                                             ).start()
 
@@ -1562,12 +1562,12 @@ def read_config_value(config_parser: configparser.RawConfigParser, section: str,
         return default_value
 
 
-def watch_pngs(pngs_path: str, is_original_delete: bool = True) -> None:
+def watch_pngs(pngs_path: str, anchor_name: str) -> None:
     try:
         if os.path.exists(pngs_path):
             time.sleep(2)
             print('开始监控 pngs - ' + pngs_path)
-            w = Watcher(pngs_path)
+            w = Watcher(pngs_path, anchor_name)
             w.run()
     except subprocess.CalledProcessError as e:
         logger.error(f'Error occurred during conversion: {e}')

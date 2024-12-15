@@ -21,7 +21,7 @@ need_image = f'{script_path}/search/nandu.png'
 need_image_region = [1240, 422, 1606, 697]
 
 # 跳过 5分钟
-#wait_time_sec = 60 * 5
+# wait_time_sec = 60 * 5
 wait_time_sec = 30
 hit_timestamp = time.time() - wait_time_sec - 1
 
@@ -41,9 +41,10 @@ def locate_0(search_img: str, big_img: str, region, confidence):
 
 
 class Watcher:
-    def __init__(self, directory_to_watch):
+    def __init__(self, directory_to_watch, anchor_name):
         self.observer = Observer()
         self.directory_to_watch = directory_to_watch
+        self.anchor_name = anchor_name
 
     def run(self):
         event_handler = Handler()
@@ -77,7 +78,7 @@ class Handler(FileSystemEventHandler):
                     return None
 
                 # 先休息一会
-                time.sleep(0.2)
+                time.sleep(0.5)
 
                 old_path = event.src_path
                 old_name = os.path.basename(old_path)
@@ -93,11 +94,19 @@ class Handler(FileSystemEventHandler):
                     hit_timestamp = time.time()
 
                     # 移动图片
-                    destination_path = os.path.join(out_right_path, old_name)
+                    old_dir = os.path.dirname(old_path).replace('/', os.path.sep)
+                    down_path = os.path.join(script_path, 'downloads').replace('/', os.path.sep)
+                    author_path = old_dir.replace(down_path, '')
+                    out_path = f'{out_right_path}/{author_path}'
+                    out_path = out_path.replace(os.path.sep + 'pngs', '')
+                    if not os.path.exists(out_path):
+                        os.makedirs(out_path)
+
+                    destination_path = os.path.join(out_path, old_name)
+                    time.sleep(0.2)
                     os.rename(new_path, destination_path)
                 else:
                     # 删除图片
                     os.remove(new_path)
             except Exception as e:
                 logger.error(f'监控文件创建-挨个处理时报错: {e}')
-
