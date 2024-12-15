@@ -35,6 +35,7 @@ from douyinliverecorder import utils
 from msg_push import (
     dingtalk, xizhi, tg_bot, send_email, bark, ntfy
 )
+from douyinliverecorder.watch import Watcher
 
 version = "v4.0.2"
 platforms = ("\n国内站点：抖音|快手|虎牙|斗鱼|YY|B站|小红书|bigo|blued|网易CC|千度热播|猫耳FM|Look|TwitCasting|百度|微博|"
@@ -1315,6 +1316,14 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
 
                                         try:
                                             save_file_path = f"{full_path}/{anchor_name}_{title_in_name}{now}_%03d.ts"
+
+                                            save_png_dir = f"{full_path}/pngs"
+                                            if os.path.exists(save_png_dir):
+                                                shutil.rmtree(save_png_dir)
+                                            if not os.path.exists(save_png_dir):
+                                                os.makedirs(save_png_dir)
+                                            save_png_path = save_png_dir + "/" + anchor_name + "-%Y-%m-%d-%H-%M-%S.png"
+
                                             command = [
                                                 "-c:v", "copy",
                                                 "-c:a", "copy",
@@ -1324,7 +1333,23 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 "-segment_format", 'mpegts',
                                                 "-reset_timestamps", "1",
                                                 save_file_path,
+
+                                                "-f", "image2",
+                                                # 使用-q:v 参数设置视频的质量等级。 质量等级的范围是0-51，其中0 表示无损压缩，51 表示最低质量
+                                                "-q:v", "2",
+                                                # 使用 fps 过滤器修改帧率为每秒1帧
+                                                "-vf", "fps=fps=1/1",
+                                                "-s", "1920x1280",
+                                                "-strftime", "1",
+                                                save_png_path
                                             ]
+
+                                            # 监控输出目录
+                                            threading.Thread(
+                                                target=watch_pngs,
+                                                args=(save_png_dir, True),
+                                                daemon=True
+                                            ).start()
 
                                             ffmpeg_command.extend(command)
                                             comment_end = check_subprocess(
@@ -1535,6 +1560,19 @@ def read_config_value(config_parser: configparser.RawConfigParser, section: str,
         with open(config_file, 'w', encoding=text_encoding) as f:
             config_parser.write(f)
         return default_value
+
+
+def watch_pngs(pngs_path: str, is_original_delete: bool = True) -> None:
+    try:
+        if os.path.exists(pngs_path):
+            time.sleep(2)
+            print('开始监控 pngs - ' + pngs_path)
+            w = Watcher(pngs_path)
+            w.run()
+    except subprocess.CalledProcessError as e:
+        logger.error(f'Error occurred during conversion: {e}')
+    except Exception as e:
+        logger.error(f'watch_pngs 报错了: {e}')
 
 
 options = {"是": True, "否": False}
