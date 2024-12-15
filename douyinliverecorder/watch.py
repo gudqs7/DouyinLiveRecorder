@@ -64,7 +64,7 @@ config_list = [
             },
             {
                 "img_name": "time_new",
-                "region": [0, 100, 900, 540],
+                "region": [0, 100, 900, 600],
                 "confidence": 0.8
             }
         ]
@@ -109,9 +109,9 @@ def locate_0(search_img: str, big_img: str, region, confidence):
 
 def test():
     # 测试
-    need_image0 = f'{need_image_dir}/single/1080.png'
-    ret_val = locate(need_image0, 'C:\\Users\\wq\\Downloads\\1080.png',
-                     region=[960, 100, 1920, 1080], confidence=0.99)
+    need_image0 = f'{need_image_dir}/time_new/720.png'
+    ret_val = locate(need_image0, 'C:\\Users\\wq\\Downloads\\22.png',
+                     region=[0, 100, 900, 640], confidence=0.99)
     print('ret_val = ' + str(ret_val))
 
 
