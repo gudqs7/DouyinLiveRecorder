@@ -65,7 +65,7 @@ config_list = [
             {
                 "img_name": "time_new",
                 "region": [0, 100, 900, 600],
-                "confidence": 0.8
+                "confidence": 0.75
             }
         ]
     },
@@ -109,10 +109,30 @@ def locate_0(search_img: str, big_img: str, region, confidence):
 
 def test():
     # 测试
-    need_image0 = f'{need_image_dir}/time_new/720.png'
-    ret_val = locate(need_image0, 'C:\\Users\\wq\\Downloads\\22.png',
-                     region=[0, 100, 900, 640], confidence=0.99)
+    search_img = {
+        "img_name": "time_new",
+        "region": [0, 100, 900, 600],
+        "confidence": 0.75
+    }
+    new_path = 'C:\\Users\\wq\\Downloads\\cj.png'
+    ret_val = check(search_img, new_path)
     print('ret_val = ' + str(ret_val))
+
+
+def check(search_img, new_path):
+    img_name = search_img["img_name"]
+    region = search_img["region"]
+    confidence = search_img["confidence"]
+    # 遍历目录
+    has_any_right = False
+    directory = Path(f'{need_image_dir}/{img_name}')
+    for file_path in directory.rglob('*'):
+        if file_path.is_file():
+            ret_val = locate_0(str(file_path), new_path, region, confidence)
+            if ret_val:
+                has_any_right = True
+                break
+    return has_any_right
 
 
 class Watcher:
@@ -173,20 +193,7 @@ class Handler(FileSystemEventHandler):
 
                     all_right = True
                     for search_img in search_img_list:
-                        img_name = search_img["img_name"]
-                        region = search_img["region"]
-                        confidence = search_img["confidence"]
-
-                        # 遍历目录
-                        has_any_right = False
-                        directory = Path(f'{need_image_dir}/{img_name}')
-                        for file_path in directory.rglob('*'):
-                            if file_path.is_file():
-                                ret_val = locate_0(str(file_path), new_path, region, confidence)
-                                if ret_val:
-                                    has_any_right = True
-                                    break
-
+                        has_any_right = check(search_img, new_path)
                         if not has_any_right:
                             all_right = False
                             break
