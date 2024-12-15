@@ -3,6 +3,7 @@ import sys
 import time
 import uuid
 import shutil
+from pathlib import Path
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -19,54 +20,64 @@ temp_dir_path = f'{script_path}/downloads/temp'
 config_list = [
     # 出成绩截图
     {
-        "out_right_path": f'{script_path}/downloads/有成绩',
+        "out": '有成绩',
         "wait_time_sec": 100,
         "hit_config": {},
         "search_img_list": [
+            # {
+            #     "img_name": "jipo.png",
+            #     "region": [0, 0, 900, 360],
+            #     "confidence": 0.8
+            # },
             {
-                "img_name": "jipo.png",
-                "region": [314, 108, 451, 207],
-                "confidence": 0.7
+                "img_name": "sure_btn",
+                "region": [28, 673, 800, 1080],
+                "confidence": 0.8
             },
             {
-                "img_name": "sure_btn.png",
-                "region": [28, 873, 469, 1080],
-                "confidence": 0.7
+                "img_name": "huajie",
+                "region": [28, 540, 800, 1080],
+                "confidence": 0.8
             }
         ]
     },
     # 出新成绩截图
     {
-        "out_right_path": f'{script_path}/downloads/新成绩',
+        "out": '新成绩',
         "wait_time_sec": 100,
         "hit_config": {},
         "search_img_list": [
+            # {
+            #     "img_name": "jipo.png",
+            #     "region": [0, 0, 900, 360],
+            #     "confidence": 0.8
+            # },
             {
-                "img_name": "time_new.png",
-                "region": [39, 88, 534, 536],
-                "confidence": 0.6
+                "img_name": "sure_btn",
+                "region": [28, 673, 800, 1080],
+                "confidence": 0.8
             },
             {
-                "img_name": "jipo.png",
-                "region": [314, 108, 451, 207],
-                "confidence": 0.7
+                "img_name": "huajie",
+                "region": [28, 540, 800, 1080],
+                "confidence": 0.8
             },
             {
-                "img_name": "sure_btn.png",
-                "region": [28, 873, 469, 1080],
-                "confidence": 0.7
+                "img_name": "time_new",
+                "region": [0, 100, 900, 540],
+                "confidence": 0.8
             }
         ]
     },
     # 单boss截图，看流程
     {
-        "out_right_path": f'{script_path}/downloads/单boss击破',
+        "out": '单boss击破',
         "wait_time_sec": 30,
         "hit_config": {},
         "search_img_list": [
             {
-                "img_name": "single.png",
-                "region": [1142, 258, 1713, 632],
+                "img_name": "single",
+                "region": [960, 100, 1920, 1080],
                 "confidence": 0.8
             }
         ]
@@ -98,9 +109,9 @@ def locate_0(search_img: str, big_img: str, region, confidence):
 
 def test():
     # 测试
-    need_image0 = f'{need_image_dir}/single.png'
-    ret_val = locate(need_image0, 'C:\\Users\\wq\\Downloads\\PixPin_2024-12-15_19-58-37.png',
-                     region=[1142, 258, 1713, 632], confidence=0.99)
+    need_image0 = f'{need_image_dir}/single/1080.png'
+    ret_val = locate(need_image0, 'C:\\Users\\wq\\Downloads\\1080.png',
+                     region=[960, 100, 1920, 1080], confidence=0.99)
     print('ret_val = ' + str(ret_val))
 
 
@@ -148,9 +159,11 @@ class Handler(FileSystemEventHandler):
                 os.rename(old_path, new_path)
 
                 for config in config_list:
-                    out_right_path = config["out_right_path"]
+                    out = config["out"]
+                    out_right_path = f'{script_path}/downloads/{out}'
                     wait_time_sec = config["wait_time_sec"]
                     hit_config = config["hit_config"]
+                    search_img_list = config["search_img_list"]
                     hit_timestamp = hit_config.get(self.anchor_name, 0)
 
                     time_pass = time.time() - hit_timestamp
@@ -158,20 +171,27 @@ class Handler(FileSystemEventHandler):
                         # print('之前已有截图，等待中，此截图跳过！')
                         continue
 
-                    right = True
-                    search_img_list = config["search_img_list"]
+                    all_right = True
                     for search_img in search_img_list:
                         img_name = search_img["img_name"]
                         region = search_img["region"]
                         confidence = search_img["confidence"]
-                        need_image = f'{need_image_dir}/{img_name}'
 
-                        ret_val = locate_0(need_image, new_path, region, confidence)
-                        if not ret_val:
-                            right = False
+                        # 遍历目录
+                        has_any_right = False
+                        directory = Path(f'{need_image_dir}/{img_name}')
+                        for file_path in directory.rglob('*'):
+                            if file_path.is_file():
+                                ret_val = locate_0(str(file_path), new_path, region, confidence)
+                                if ret_val:
+                                    has_any_right = True
+                                    break
+
+                        if not has_any_right:
+                            all_right = False
                             break
 
-                    if right:
+                    if all_right:
                         print('识别到指定截图！！ ' + old_path)
                         hit_config[self.anchor_name] = time.time()
 
@@ -195,5 +215,5 @@ class Handler(FileSystemEventHandler):
                 os.remove(new_path)
 
             except Exception as e:
-                print('')
+                print(f'监控文件创建-挨个处理时报错: {e}')
                 # logger.error(f'监控文件创建-挨个处理时报错: {e}')
