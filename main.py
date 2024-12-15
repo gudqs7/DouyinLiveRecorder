@@ -1337,9 +1337,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 "-f", "image2",
                                                 # 使用-q:v 参数设置视频的质量等级。 质量等级的范围是0-51，其中0 表示无损压缩，51 表示最低质量
                                                 "-q:v", "2",
-                                                # 使用 fps 过滤器修改帧率为每秒1帧
-                                                "-vf", "fps=fps=1/1",
-                                                "-s", "1920x1280",
+                                                # 使用 fps 过滤器修改帧率为每2秒1帧
+                                                "-vf", "fps=fps=1/2",
+                                                "-s", "1920x1080",
                                                 "-strftime", "1",
                                                 save_png_path
                                             ]
