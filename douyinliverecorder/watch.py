@@ -3,83 +3,23 @@ import sys
 import time
 import uuid
 import shutil
-from pathlib import Path
+import pyautogui as auto
+import io
+import base64
 
+from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from pyautogui import locate
-import pyautogui as auto
+from msg_push import xizhi
+from urllib.parse import quote
+from PIL import Image
+from wq import config_list
+from wq import xizhi_api_url
 
 script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
 
 temp_dir_path = f'{script_path}/downloads/temp'
-
-config_list = [
-    # 出成绩截图
-    {
-        "out": '有成绩',
-        "wait_time_sec": 100,
-        "hit_config": {},
-        "search_img_list": [
-            # {
-            #     "img_name": "jipo.png",
-            #     "region": [0, 0, 900, 360],
-            #     "confidence": 0.8
-            # },
-            {
-                "img_name": "sure_btn",
-                "region": [28, 673, 800, 1080],
-                "confidence": 0.8
-            },
-            {
-                "img_name": "huajie",
-                "region": [28, 540, 800, 1080],
-                "confidence": 0.8
-            }
-        ]
-    },
-    # 出新成绩截图
-    {
-        "out": '新成绩',
-        "wait_time_sec": 100,
-        "hit_config": {},
-        "search_img_list": [
-            # {
-            #     "img_name": "jipo.png",
-            #     "region": [0, 0, 900, 360],
-            #     "confidence": 0.8
-            # },
-            {
-                "img_name": "sure_btn",
-                "region": [28, 673, 800, 1080],
-                "confidence": 0.8
-            },
-            {
-                "img_name": "huajie",
-                "region": [28, 540, 800, 1080],
-                "confidence": 0.8
-            },
-            {
-                "img_name": "time_new",
-                "region": [0, 100, 900, 600],
-                "confidence": 0.75
-            }
-        ]
-    },
-    # 单boss截图，看流程
-    {
-        "out": '单boss击破',
-        "wait_time_sec": 30,
-        "hit_config": {},
-        "search_img_list": [
-            {
-                "img_name": "single",
-                "region": [960, 100, 1920, 1080],
-                "confidence": 0.8
-            }
-        ]
-    },
-]
 
 if os.path.exists(temp_dir_path):
     shutil.rmtree(temp_dir_path)
@@ -103,9 +43,33 @@ def test():
         "region": [0, 100, 900, 600],
         "confidence": 0.75
     }
-    new_path = 'C:\\Users\\wq\\Downloads\\cj.png'
+    new_path = 'C:\\Users\\wq\\Downloads\\11.png'
     ret_val = check(search_img, new_path)
     print('ret_val = ' + str(ret_val))
+
+    send_result_msg('星凉（叶子大圣）', 'C:\\Users\\wq\\Downloads\\11.png')
+
+
+def send_result_msg(author_name, img_path, title):
+    try:
+        img = Image.open(img_path)
+        buffer = io.BytesIO()
+        img = img.convert('RGB')
+        # 获取图片的宽度和高度
+        width, height = img.size
+        # 计算左半边的宽度（这里是原图宽度的一半）
+        left_half_width = width // 2
+        # 定义左半边的区域
+        left_half_region = (0, 0, left_half_width, height)
+        # 剪切左半边
+        left_half_img = img.crop(left_half_region)
+        left_half_img.save(buffer, format='JPEG', quality=20)  # 压缩图片并保存到字节流中
+        img_bytes = buffer.getvalue()
+        img_base64 = base64.b64encode(img_bytes).decode('gbk')
+        img_data = quote('data:image/png;base64,' + img_base64)
+        xizhi(xizhi_api_url, author_name + title, '成绩截图：  \n![成绩截图](' + img_data + ')')
+    except Exception as e:
+        print(f'发送微信消息时报错: {e}')
 
 
 def check(search_img, new_path):
@@ -173,6 +137,10 @@ class Handler(FileSystemEventHandler):
                     wait_time_sec = config["wait_time_sec"]
                     hit_config = config["hit_config"]
                     search_img_list = config["search_img_list"]
+                    send_msg = config.get("send_msg", {})
+                    send_msg_enable = send_msg.get("enable", False)
+                    send_msg_title = send_msg.get("title", " 监控到新截图")
+
                     hit_timestamp = hit_config.get(author_name, 0)
 
                     time_pass = time.time() - hit_timestamp
@@ -190,6 +158,9 @@ class Handler(FileSystemEventHandler):
                     if all_right:
                         print('识别到指定截图！！ ' + old_path)
                         hit_config[author_name] = time.time()
+
+                        if send_msg_enable:
+                            send_result_msg(author_name, new_path, send_msg_title)
 
                         # 复制图片
                         now_time_str = time.strftime('%Y-%m-%d')
