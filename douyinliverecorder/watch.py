@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import traceback
 import uuid
 import shutil
 import pyautogui as auto
@@ -27,12 +28,15 @@ if not os.path.exists(temp_dir_path):
     os.makedirs(temp_dir_path)
 
 
-def locate_0(search_img: str, big_img: str, region, confidence):
+def locate_0(search_img: str, big_img: str, region, confidence, print_error: bool = False):
     try:
         ret_val = locate(search_img, big_img, region=region, confidence=confidence)
         if ret_val:
             return True
-    except auto.ImageNotFoundException:
+    except auto.ImageNotFoundException as e:
+        if print_error:
+            print('图片不匹配，结果如下')
+            traceback.print_exc()
         return False
 
 
@@ -43,11 +47,11 @@ def test():
         "region": [0, 100, 900, 600],
         "confidence": 0.75
     }
-    new_path = 'C:\\Users\\wq\\Downloads\\11.png'
-    ret_val = check(search_img, new_path)
+    new_path = 'C:\\Users\\wq\\Downloads\\22.png'
+    ret_val = check(search_img, new_path, True)
     print('ret_val = ' + str(ret_val))
 
-    send_result_msg('星凉（叶子大圣）', 'C:\\Users\\wq\\Downloads\\11.png')
+    #send_result_msg('星凉（叶子大圣）', 'C:\\Users\\wq\\Downloads\\11.png','有成绩')
 
 
 def send_result_msg(author_name, img_path, title):
@@ -72,7 +76,7 @@ def send_result_msg(author_name, img_path, title):
         print(f'发送微信消息时报错: {e}')
 
 
-def check(search_img, new_path):
+def check(search_img, new_path, print_error: bool = False):
     img_name = search_img["img_name"]
     region = search_img["region"]
     confidence = search_img["confidence"]
@@ -81,7 +85,7 @@ def check(search_img, new_path):
     directory = Path(f'{script_path}/search/{img_name}')
     for file_path in directory.rglob('*'):
         if file_path.is_file():
-            ret_val = locate_0(str(file_path), new_path, region, confidence)
+            ret_val = locate_0(str(file_path), new_path, region, confidence, print_error)
             if ret_val:
                 has_any_right = True
                 break

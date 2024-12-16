@@ -23,7 +23,7 @@ config_list = [
             }
         ],
         "send_msg": {
-            "enable": True,
+            "enable": False,
             "title": " 有个成绩！"
         }
     },
