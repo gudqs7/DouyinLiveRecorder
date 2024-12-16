@@ -21,7 +21,11 @@ config_list = [
                 "region": [28, 540, 800, 1080],
                 "confidence": 0.8
             }
-        ]
+        ],
+        "send_msg": {
+            "enable": True,
+            "title": " 有个成绩！"
+        }
     },
     # 出新成绩截图
     {
