@@ -1,6 +1,10 @@
-requests
+requests~=2.32.3
 PyExecJS
 loguru==0.7.2
 pycryptodome==3.20.0
 distro==1.9.0
 tqdm==4.66.5
+setuptools~=70.0.0
+PyAutoGUI~=0.9.54
+pillow~=11.0.0
+watchdog~=6.0.0

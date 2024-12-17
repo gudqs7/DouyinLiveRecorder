@@ -1,31 +1,36 @@
+import base64
+import io
 import os
+import shutil
 import sys
 import time
 import traceback
 import uuid
-import shutil
-import pyautogui as auto
-import io
-import base64
-
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from pyautogui import locate
-from msg_push import xizhi
 from urllib.parse import quote
+
+import pyautogui as auto
 from PIL import Image
+from pyautogui import locate
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+from msg_push import xizhi
 from wq import config_list
 from wq import xizhi_api_url
 
-script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
 
+script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
 temp_dir_path = f'{script_path}/downloads/temp'
 
 if os.path.exists(temp_dir_path):
     shutil.rmtree(temp_dir_path)
 if not os.path.exists(temp_dir_path):
     os.makedirs(temp_dir_path)
+
+# 创建一个包含5个线程的线程池
+file_handle_executor = ThreadPoolExecutor(max_workers=20, thread_name_prefix='file_handle_executor')
 
 
 def locate_0(search_img: str, big_img: str, region, confidence, print_error: bool = False):
@@ -47,11 +52,21 @@ def test():
         "region": [0, 100, 900, 600],
         "confidence": 0.75
     }
-    new_path = 'C:\\Users\\wq\\Downloads\\22.png'
+    # search_img = {
+    #     "img_name": "sure_btn",
+    #     "region": [28, 673, 800, 1080],
+    #     "confidence": 0.8
+    # }
+    # search_img = {
+    #     "img_name": "huajie",
+    #     "region": [28, 540, 800, 1080],
+    #     "confidence": 0.8
+    # }
+    new_path = 'C:\\Users\\wq\\Downloads\\33.png'
     ret_val = check(search_img, new_path, True)
     print('ret_val = ' + str(ret_val))
 
-    #send_result_msg('星凉（叶子大圣）', 'C:\\Users\\wq\\Downloads\\11.png','有成绩')
+    # send_result_msg('星凉（叶子大圣）', 'C:\\Users\\wq\\Downloads\\11.png','有成绩')
 
 
 def send_result_msg(author_name, img_path, title):
@@ -92,6 +107,63 @@ def check(search_img, new_path, print_error: bool = False):
     return has_any_right
 
 
+def check_file(file_path, author_name):
+    # 先休息一会,等待图片完全输出
+    time.sleep(0.5)
+
+    # 移动文件并重命名，目录彻底英文化
+    old_path = file_path
+    old_name = os.path.basename(old_path)
+    new_name = str(time.time()) + '-' + str(uuid.uuid4()) + '.png'
+    new_path = os.path.join(temp_dir_path, new_name)
+    os.rename(old_path, new_path)
+
+    for config in config_list:
+        out = config["out"]
+        wait_time_sec = config["wait_time_sec"]
+        hit_config = config["hit_config"]
+        search_img_list = config["search_img_list"]
+        send_msg = config.get("send_msg", {})
+        send_msg_enable = send_msg.get("enable", False)
+        send_msg_title = send_msg.get("title", " 监控到新截图")
+
+        hit_timestamp = hit_config.get(author_name, 0)
+
+        time_pass = time.time() - hit_timestamp
+        if hit_timestamp != 0 and time_pass < wait_time_sec:
+            # print('之前已有截图，等待中，此截图跳过！')
+            continue
+
+        all_right = True
+        for search_img in search_img_list:
+            has_any_right = check(search_img, new_path)
+            if not has_any_right:
+                all_right = False
+                break
+
+        if all_right:
+            hit_config[author_name] = time.time()
+
+            if send_msg_enable:
+                send_result_msg(author_name, new_path, send_msg_title)
+
+            # 复制图片
+            now_time_str = time.strftime('%Y-%m-%d')
+            out_path = f'{script_path}/downloads/{out}/{now_time_str}/{author_name}'
+
+            if not os.path.exists(out_path):
+                os.makedirs(out_path)
+
+            destination_path = os.path.join(out_path, old_name)
+            time.sleep(0.1)
+            # 拷贝单个文件
+            shutil.copy2(new_path, destination_path)
+
+    # 最后删除图片
+    time.sleep(0.5)
+    os.remove(new_path)
+
+
 class Watcher:
     def __init__(self, directory_to_watch, anchor_name):
         self.observer = Observer()
@@ -117,71 +189,12 @@ class Handler(FileSystemEventHandler):
         self.anchor_name = anchor_name
 
     def on_any_event(self, event):
-        global hit_timestamp
         if event.is_directory:
             return None
         elif event.event_type == 'created':
             try:
-                # 当文件被创建时
-                # print(f"Received created event - {event.src_path}.")
-
-                # 先休息一会,等待图片完全输出
-                time.sleep(0.5)
-
-                # 移动文件并重命名，目录彻底英文化
-                old_path = event.src_path
-                old_name = os.path.basename(old_path)
-                new_name = str(time.time()) + '-' + str(uuid.uuid4()) + '.png'
-                new_path = os.path.join(temp_dir_path, new_name)
-                os.rename(old_path, new_path)
-
-                for config in config_list:
-                    out = config["out"]
-                    author_name = self.anchor_name
-                    wait_time_sec = config["wait_time_sec"]
-                    hit_config = config["hit_config"]
-                    search_img_list = config["search_img_list"]
-                    send_msg = config.get("send_msg", {})
-                    send_msg_enable = send_msg.get("enable", False)
-                    send_msg_title = send_msg.get("title", " 监控到新截图")
-
-                    hit_timestamp = hit_config.get(author_name, 0)
-
-                    time_pass = time.time() - hit_timestamp
-                    if hit_timestamp != 0 and time_pass < wait_time_sec:
-                        # print('之前已有截图，等待中，此截图跳过！')
-                        continue
-
-                    all_right = True
-                    for search_img in search_img_list:
-                        has_any_right = check(search_img, new_path)
-                        if not has_any_right:
-                            all_right = False
-                            break
-
-                    if all_right:
-                        print('识别到指定截图！！ ' + old_path)
-                        hit_config[author_name] = time.time()
-
-                        if send_msg_enable:
-                            send_result_msg(author_name, new_path, send_msg_title)
-
-                        # 复制图片
-                        now_time_str = time.strftime('%Y-%m-%d')
-                        out_path = f'{script_path}/downloads/{out}/{now_time_str}/{author_name}'
-
-                        if not os.path.exists(out_path):
-                            os.makedirs(out_path)
-
-                        destination_path = os.path.join(out_path, old_name)
-                        time.sleep(0.1)
-                        # 拷贝单个文件
-                        shutil.copy2(new_path, destination_path)
-
-                # 最后删除图片
-                time.sleep(0.5)
-                os.remove(new_path)
-
+                # 提交任务到线程池
+                file_handle_executor.submit(check_file, event.src_path, self.anchor_name)
             except Exception as e:
                 print(f'监控文件创建-挨个处理时报错: {e}')
                 # logger.error(f'监控文件创建-挨个处理时报错: {e}')
