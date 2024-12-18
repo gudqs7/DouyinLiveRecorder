@@ -3,9 +3,11 @@ import io
 import os
 import shutil
 import sys
+import threading
 import time
 import traceback
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import quote
 
@@ -21,7 +23,7 @@ from wq import config_list
 from wq import xizhi_api_url
 
 script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
-temp_dir_path = f'{script_path}/downloads/temp'
+temp_dir_path = f'{script_path}/downloads/2_temp'
 
 if os.path.exists(temp_dir_path):
     shutil.rmtree(temp_dir_path)
@@ -31,6 +33,8 @@ if not os.path.exists(temp_dir_path):
 # 文件创建时间
 file_status = {}
 
+file_handle_executor = ThreadPoolExecutor(max_workers=3)
+hit_config_lock = threading.Lock()
 
 def locate_0(search_img: str, big_img: str, region, confidence, print_error: bool = False):
     try:
@@ -117,36 +121,37 @@ def check_file(new_path, author_name, old_name):
             send_msg_enable = send_msg.get("enable", False)
             send_msg_title = send_msg.get("title", " 监控到新截图")
 
-            hit_timestamp = hit_config.get(author_name, 0)
+            with hit_config_lock:
+                hit_timestamp = hit_config.get(author_name, 0)
+                time_pass = time.time() - hit_timestamp
+                if hit_timestamp != 0 and time_pass < wait_time_sec:
+                    # print('之前已有截图，等待中，此截图跳过！')
+                    continue
 
-            time_pass = time.time() - hit_timestamp
-            if hit_timestamp != 0 and time_pass < wait_time_sec:
-                # print('之前已有截图，等待中，此截图跳过！')
-                continue
+                all_right = True
+                for search_img in search_img_list:
+                    has_any_right = check(search_img, new_path)
+                    if not has_any_right:
+                        all_right = False
+                        break
 
-            all_right = True
-            for search_img in search_img_list:
-                has_any_right = check(search_img, new_path)
-                if not has_any_right:
-                    all_right = False
-                    break
+                if all_right:
+                    hit_config[author_name] = time.time()
+                    hit_config_lock.release()
 
-            if all_right:
-                hit_config[author_name] = time.time()
+                    if send_msg_enable:
+                        send_result_msg(author_name, new_path, send_msg_title)
 
-                if send_msg_enable:
-                    send_result_msg(author_name, new_path, send_msg_title)
+                    # 复制图片
+                    now_time_str = time.strftime('%Y-%m-%d')
+                    out_path = f'{script_path}/downloads/{out}/{now_time_str}/{author_name}'
 
-                # 复制图片
-                now_time_str = time.strftime('%Y-%m-%d')
-                out_path = f'{script_path}/downloads/{out}/{now_time_str}/{author_name}'
+                    if not os.path.exists(out_path):
+                        os.makedirs(out_path)
 
-                if not os.path.exists(out_path):
-                    os.makedirs(out_path)
-
-                destination_path = os.path.join(out_path, old_name)
-                # 拷贝单个文件
-                shutil.copy2(new_path, destination_path)
+                    destination_path = os.path.join(out_path, old_name)
+                    # 拷贝单个文件
+                    shutil.copy(new_path, destination_path)
     except Exception as e:
         exc_string = traceback.format_exc()
         logger.error(f'check_file 报错: {e}\n' + exc_string + '\n\n\n')
@@ -159,6 +164,27 @@ def check_file(new_path, author_name, old_name):
             except Exception as e:
                 logger.error(f'remove file 报错: {e} file = {new_path}\n')
                 time.sleep(0.1)
+
+
+def process_filename(filename):
+    # 去除前22位字符
+    new_filename = filename[22:]
+    # 去除.png后缀
+    if new_filename.endswith('.png'):
+        new_filename = new_filename[:-4]
+    return new_filename
+
+
+def rename_and_check(png_path, new_path, anchor_name, old_name):
+    time.sleep(0.15)
+    while True:
+        try:
+            os.rename(png_path, new_path)
+            break
+        except Exception as e:
+            time.sleep(0.35)
+            logger.error(f'重命名失败: {e}')
+    check_file(new_path, anchor_name, old_name)
 
 
 class Watcher:
@@ -204,14 +230,10 @@ class Handler(FileSystemEventHandler):
                     old_name = os.path.basename(png_path)
                     new_name = str(time.time()) + '-' + str(uuid.uuid4()) + '.png'
                     new_path = os.path.join(temp_dir_path, new_name)
-                    time.sleep(0.2)
-                    while True:
-                        try:
-                            os.rename(png_path, new_path)
-                            break
-                        except Exception as e:
-                            time.sleep(0.5)
-                            logger.error(f'重命名失败: {e}')
-                    check_file(new_path, self.anchor_name, old_name)
+                    anchor_name = process_filename(old_name)
+
+                    file_handle_executor.submit(rename_and_check, png_path, new_path, anchor_name, old_name)
+
+
             except Exception as e:
                 logger.error(f'on_any_event - modified 时报错: {e}')

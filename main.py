@@ -71,6 +71,7 @@ text_encoding = 'utf-8-sig'
 rstr = r"[\/\\\:\*\？?\"\<\>\|&#.。,， ~！· ]"
 ffmpeg_path = f"{script_path}/ffmpeg.exe"
 default_path = f'{script_path}/downloads'
+pngs_path = f'{script_path}/downloads/1_pngs'
 os.makedirs(default_path, exist_ok=True)
 file_update_lock = threading.Lock()
 os_type = os.name
@@ -1316,13 +1317,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
 
                                         try:
                                             save_file_path = f"{full_path}/{anchor_name}_{title_in_name}{now}_%03d.ts"
-
-                                            save_png_dir = f"{full_path}/pngs"
-                                            if os.path.exists(save_png_dir):
-                                                shutil.rmtree(save_png_dir)
-                                            if not os.path.exists(save_png_dir):
-                                                os.makedirs(save_png_dir)
-                                            save_png_path = save_png_dir + "/" + "%Y-%m-%d   %H_%M_%S_" + anchor_name + ".png"
+                                            save_png_path = pngs_path + "/" + "%Y-%m-%d   %H_%M_%S_" + anchor_name + ".png"
 
                                             command = [
                                                 # "-c:v", "copy",
@@ -1343,13 +1338,6 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 "-strftime", "1",
                                                 save_png_path
                                             ]
-
-                                            # 监控输出目录
-                                            threading.Thread(
-                                                target=watch_pngs,
-                                                args=(save_png_dir, anchor_name),
-                                                daemon=True
-                                            ).start()
 
                                             ffmpeg_command.extend(command)
                                             comment_end = check_subprocess(
@@ -1585,6 +1573,16 @@ if language and 'en' not in language.lower():
     builtins.print = translated_print
 
 try:
+    if os.path.exists(pngs_path):
+        shutil.rmtree(pngs_path)
+    if not os.path.exists(pngs_path):
+        os.makedirs(pngs_path)
+    threading.Thread(
+        target=watch_pngs,
+        args=(pngs_path, ''),
+        daemon=True
+    ).start()
+
     if skip_proxy_check:
         global_proxy = True
     else:
