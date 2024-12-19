@@ -25,16 +25,12 @@ from wq import xizhi_api_url
 script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
 temp_dir_path = f'{script_path}/downloads/2_temp'
 
-if os.path.exists(temp_dir_path):
-    shutil.rmtree(temp_dir_path)
-if not os.path.exists(temp_dir_path):
-    os.makedirs(temp_dir_path)
-
 # 文件创建时间
 file_status = {}
 
 file_handle_executor = ThreadPoolExecutor(max_workers=3)
 hit_config_lock = threading.Lock()
+
 
 def locate_0(search_img: str, big_img: str, region, confidence, print_error: bool = False):
     try:
@@ -65,7 +61,7 @@ def test():
     #     "region": [28, 540, 800, 1080],
     #     "confidence": 0.8
     # }
-    new_path = 'C:\\Users\\wq\\Downloads\\33.png'
+    new_path = 'C:\\Users\\wq\\Downloads\\44.png'
     ret_val = check(search_img, new_path, True)
     print('ret_val = ' + str(ret_val))
 
@@ -115,13 +111,13 @@ def check_file(new_path, author_name, old_name):
         for config in config_list:
             out = config["out"]
             wait_time_sec = config["wait_time_sec"]
-            hit_config = config["hit_config"]
             search_img_list = config["search_img_list"]
             send_msg = config.get("send_msg", {})
             send_msg_enable = send_msg.get("enable", False)
             send_msg_title = send_msg.get("title", " 监控到新截图")
 
             with hit_config_lock:
+                hit_config = config["hit_config"]
                 hit_timestamp = hit_config.get(author_name, 0)
                 time_pass = time.time() - hit_timestamp
                 if hit_timestamp != 0 and time_pass < wait_time_sec:

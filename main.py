@@ -72,6 +72,7 @@ rstr = r"[\/\\\:\*\？?\"\<\>\|&#.。,， ~！· ]"
 ffmpeg_path = f"{script_path}/ffmpeg.exe"
 default_path = f'{script_path}/downloads'
 pngs_path = f'{script_path}/downloads/1_pngs'
+temp_dir_path = f'{script_path}/downloads/2_temp'
 os.makedirs(default_path, exist_ok=True)
 file_update_lock = threading.Lock()
 os_type = os.name
@@ -1573,6 +1574,11 @@ if language and 'en' not in language.lower():
     builtins.print = translated_print
 
 try:
+
+    if os.path.exists(temp_dir_path):
+        shutil.rmtree(temp_dir_path)
+    if not os.path.exists(temp_dir_path):
+        os.makedirs(temp_dir_path)
     if os.path.exists(pngs_path):
         shutil.rmtree(pngs_path)
     if not os.path.exists(pngs_path):
