@@ -1805,7 +1805,7 @@ while True:
                 else:
                     quality, url, name = split_line
 
-                if quality not in ("原画", "蓝光", "超清", "高清", "标清", "流畅"):
+                if quality not in ("录制原画","原画", "蓝光", "超清", "高清", "标清", "流畅"):
                     quality = '原画'
 
                 if url not in url_line_list:
