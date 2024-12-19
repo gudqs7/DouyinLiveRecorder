@@ -997,8 +997,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                             full_path = f'{full_path}/{live_title}_{anchor_name}'
                                         else:
                                             full_path = f'{full_path}/{now[:10]}_{live_title}'
-                                    if not os.path.exists(full_path):
-                                        os.makedirs(full_path)
+                                    if need_record:
+                                        if not os.path.exists(full_path):
+                                            os.makedirs(full_path)
                                 except Exception as e:
                                     logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
 
