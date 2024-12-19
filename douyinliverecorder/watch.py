@@ -27,6 +27,7 @@ temp_dir_path = f'{script_path}/downloads/2_temp'
 
 # 文件创建时间
 file_status = {}
+hit_timestamp_config = {}
 
 file_handle_executor = ThreadPoolExecutor(max_workers=3)
 hit_config_lock = threading.RLock()
@@ -61,7 +62,7 @@ def test():
     #     "region": [28, 540, 800, 1080],
     #     "confidence": 0.8
     # }
-    new_path = 'C:\\Users\\wq\\Downloads\\44.png'
+    new_path = 'C:\\Users\\wq\\Downloads\\11.png'
     ret_val = check(search_img, new_path, True)
     print('ret_val = ' + str(ret_val))
 
@@ -118,7 +119,7 @@ def check_file(new_path, author_name, old_name):
                 send_msg_enable = send_msg.get("enable", False)
                 send_msg_title = send_msg.get("title", " 监控到新截图")
 
-                hit_config = config["hit_config"]
+                hit_config = hit_timestamp_config.get(out, {})
                 hit_timestamp = hit_config.get(author_name, 0)
                 time_pass = time.time() - hit_timestamp
                 if hit_timestamp != 0 and time_pass < wait_time_sec:
@@ -134,6 +135,7 @@ def check_file(new_path, author_name, old_name):
 
                 if all_right:
                     hit_config[author_name] = time.time()
+                    hit_timestamp_config[out] = hit_config
 
                     if send_msg_enable:
                         send_result_msg(author_name, new_path, send_msg_title)
