@@ -452,6 +452,8 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
             count_time = time.time()
             retry = 0
             record_quality, record_url, anchor_name = url_data
+            need_record = record_quality == '录制原画'
+            record_quality = '原画'
             proxy_address = proxy_addr
             platform = '未知平台'
             live_domain = '/'.join(record_url.split('/')[0:3])
@@ -1319,17 +1321,18 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                         try:
                                             save_file_path = f"{full_path}/{anchor_name}_{title_in_name}{now}_%03d.ts"
                                             save_png_path = pngs_path + "/" + "%Y-%m-%d   %H_%M_%S_" + anchor_name + ".png"
-
-                                            command = [
-                                                # "-c:v", "copy",
-                                                # "-c:a", "copy",
-                                                # "-map", "0",
-                                                # "-f", "segment",
-                                                # "-segment_time", split_time,
-                                                # "-segment_format", 'mpegts',
-                                                # "-reset_timestamps", "1",
-                                                # save_file_path,
-
+                                            command = []
+                                            record_command = [
+                                                "-c:v", "copy",
+                                                "-c:a", "copy",
+                                                "-map", "0",
+                                                "-f", "segment",
+                                                "-segment_time", split_time,
+                                                "-segment_format", 'mpegts',
+                                                "-reset_timestamps", "1",
+                                                save_file_path,
+                                            ]
+                                            watch_command = [
                                                 "-f", "image2",
                                                 # 使用-q:v 参数设置视频的质量等级。 质量等级的范围是0-51，其中0 表示无损压缩，51 表示最低质量
                                                 "-q:v", "2",
@@ -1339,6 +1342,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 "-strftime", "1",
                                                 save_png_path
                                             ]
+                                            if need_record:
+                                                command.extend(record_command)
+                                            command.extend(watch_command)
 
                                             ffmpeg_command.extend(command)
                                             comment_end = check_subprocess(

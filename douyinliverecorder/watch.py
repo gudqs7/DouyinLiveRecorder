@@ -29,7 +29,7 @@ temp_dir_path = f'{script_path}/downloads/2_temp'
 file_status = {}
 
 file_handle_executor = ThreadPoolExecutor(max_workers=3)
-hit_config_lock = threading.Lock()
+hit_config_lock = threading.RLock()
 
 
 def locate_0(search_img: str, big_img: str, region, confidence, print_error: bool = False):
@@ -109,14 +109,15 @@ def check(search_img, new_path, print_error: bool = False):
 def check_file(new_path, author_name, old_name):
     try:
         for config in config_list:
-            out = config["out"]
-            wait_time_sec = config["wait_time_sec"]
-            search_img_list = config["search_img_list"]
-            send_msg = config.get("send_msg", {})
-            send_msg_enable = send_msg.get("enable", False)
-            send_msg_title = send_msg.get("title", " 监控到新截图")
+            try:
+                hit_config_lock.acquire()
+                out = config["out"]
+                wait_time_sec = config["wait_time_sec"]
+                search_img_list = config["search_img_list"]
+                send_msg = config.get("send_msg", {})
+                send_msg_enable = send_msg.get("enable", False)
+                send_msg_title = send_msg.get("title", " 监控到新截图")
 
-            with hit_config_lock:
                 hit_config = config["hit_config"]
                 hit_timestamp = hit_config.get(author_name, 0)
                 time_pass = time.time() - hit_timestamp
@@ -133,7 +134,6 @@ def check_file(new_path, author_name, old_name):
 
                 if all_right:
                     hit_config[author_name] = time.time()
-                    hit_config_lock.release()
 
                     if send_msg_enable:
                         send_result_msg(author_name, new_path, send_msg_title)
@@ -148,6 +148,12 @@ def check_file(new_path, author_name, old_name):
                     destination_path = os.path.join(out_path, old_name)
                     # 拷贝单个文件
                     shutil.copy(new_path, destination_path)
+            except Exception as e2:
+                exc_string = traceback.format_exc()
+                logger.error(f'check_file 内循环报错: {e2}\n' + exc_string + '\n\n\n')
+            finally:
+                hit_config_lock.release()
+
     except Exception as e:
         exc_string = traceback.format_exc()
         logger.error(f'check_file 报错: {e}\n' + exc_string + '\n\n\n')
