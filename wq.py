@@ -22,21 +22,21 @@ config_list = [
         }
     },
     # 出成绩截图
-    {
-        "out": '有成绩',
-        "wait_time_sec": 30,
-        "search_img_list": [
-            {
-                "img_name": "huajie",
-                "region": [206, 191, 1102, 907],
-                "confidence": 0.75
-            }
-        ],
-        "send_msg": {
-            "enable": False,
-            "title": " 有个成绩！"
-        }
-    },
+    # {
+    #     "out": '有成绩',
+    #     "wait_time_sec": 30,
+    #     "search_img_list": [
+    #         {
+    #             "img_name": "huajie",
+    #             "region": [206, 191, 1102, 907],
+    #             "confidence": 0.75
+    #         }
+    #     ],
+    #     "send_msg": {
+    #         "enable": False,
+    #         "title": " 有个成绩！"
+    #     }
+    # },
     # 单boss截图，看流程
     # {
     #     "out": '单boss击破',
