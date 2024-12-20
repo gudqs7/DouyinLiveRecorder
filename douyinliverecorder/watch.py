@@ -48,16 +48,16 @@ def locate_0(search_img: str, big_img: str, region, confidence, print_error: boo
 def test():
     # 测试
     search_img = {
-        "img_name": "time_new",
+        "img_name": "test",
         "region": [0, 100, 900, 600],
-        "confidence": 0.75
+        "confidence": 0.99
     }
-    search_img = {
-        "img_name": "huajie",
-        "region": [28, 540, 800, 1080],
-        "confidence": 0.8
-    }
-    new_path = 'C:\\Users\\wq\\Downloads\\22.png'
+    # search_img = {
+    #     "img_name": "test2",
+    #     "region": [206, 191, 1102, 907],
+    #     "confidence": 0.99
+    # }
+    new_path = 'C:\\Users\\wq\\Downloads\\33.png'
     ret_val = check(search_img, new_path, True)
     print('ret_val = ' + str(ret_val))
 

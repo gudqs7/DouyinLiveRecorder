@@ -7,7 +7,7 @@ config_list = [
         "search_img_list": [
             {
                 "img_name": "huajie",
-                "region": [28, 540, 800, 1080],
+                "region": [206, 191, 1102, 907],
                 "confidence": 0.8
             },
             {
@@ -28,7 +28,7 @@ config_list = [
         "search_img_list": [
             {
                 "img_name": "huajie",
-                "region": [28, 540, 800, 1080],
+                "region": [206, 191, 1102, 907],
                 "confidence": 0.8
             }
         ],
@@ -38,15 +38,15 @@ config_list = [
         }
     },
     # 单boss截图，看流程
-    {
-        "out": '单boss击破',
-        "wait_time_sec": 30,
-        "search_img_list": [
-            {
-                "img_name": "single",
-                "region": [960, 100, 1920, 1080],
-                "confidence": 0.8
-            }
-        ]
-    },
+    # {
+    #     "out": '单boss击破',
+    #     "wait_time_sec": 30,
+    #     "search_img_list": [
+    #         {
+    #             "img_name": "single",
+    #             "region": [960, 100, 1920, 1080],
+    #             "confidence": 0.8
+    #         }
+    #     ]
+    # },
 ]
