@@ -49,15 +49,10 @@ def test():
     # 测试
     search_img = {
         "img_name": "test",
-        "region": [0, 100, 900, 600],
+        "region": [206, 191, 1102, 907],
         "confidence": 0.99
     }
-    # search_img = {
-    #     "img_name": "test2",
-    #     "region": [206, 191, 1102, 907],
-    #     "confidence": 0.99
-    # }
-    new_path = 'C:\\Users\\wq\\Downloads\\33.png'
+    new_path = 'C:\\Users\\wq\\Downloads\\cj2.png'
     ret_val = check(search_img, new_path, True)
     print('ret_val = ' + str(ret_val))
 

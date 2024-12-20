@@ -8,7 +8,7 @@ config_list = [
             {
                 "img_name": "huajie",
                 "region": [206, 191, 1102, 907],
-                "confidence": 0.8
+                "confidence": 0.75
             },
             {
                 "img_name": "time_new",
@@ -29,7 +29,7 @@ config_list = [
             {
                 "img_name": "huajie",
                 "region": [206, 191, 1102, 907],
-                "confidence": 0.8
+                "confidence": 0.75
             }
         ],
         "send_msg": {
