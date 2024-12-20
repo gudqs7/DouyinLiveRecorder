@@ -106,7 +106,6 @@ def check_file(new_path, author_name, old_name):
     try:
         for config in config_list:
             try:
-                hit_config_lock.acquire()
                 out = config["out"]
                 wait_time_sec = config["wait_time_sec"]
                 search_img_list = config["search_img_list"]
@@ -129,8 +128,14 @@ def check_file(new_path, author_name, old_name):
                         break
 
                 if all_right:
+                    hit_config_lock.acquire()
+                    hit_config = hit_timestamp_config.get(out, {})
+                    time_pass = time.time() - hit_timestamp
+                    if hit_timestamp != 0 and time_pass < wait_time_sec:
+                        continue
                     hit_config[author_name] = time.time()
                     hit_timestamp_config[out] = hit_config
+                    hit_config_lock.release()
 
                     if send_msg_enable:
                         send_result_msg(author_name, new_path, send_msg_title)
@@ -148,8 +153,6 @@ def check_file(new_path, author_name, old_name):
             except Exception as e2:
                 exc_string = traceback.format_exc()
                 logger.error(f'check_file 内循环报错: {e2}\n' + exc_string + '\n\n\n')
-            finally:
-                hit_config_lock.release()
 
     except Exception as e:
         exc_string = traceback.format_exc()
@@ -175,14 +178,14 @@ def process_filename(filename):
 
 
 def rename_and_check(png_path, new_path, anchor_name, old_name):
-    time.sleep(0.15)
+    time.sleep(0.1)
     while True:
         try:
             os.rename(png_path, new_path)
             break
         except Exception as e:
-            time.sleep(0.35)
             logger.error(f'重命名失败: {e}')
+            time.sleep(0.35)
     check_file(new_path, anchor_name, old_name)
 
 
@@ -230,9 +233,6 @@ class Handler(FileSystemEventHandler):
                     new_name = str(time.time()) + '-' + str(uuid.uuid4()) + '.png'
                     new_path = os.path.join(temp_dir_path, new_name)
                     anchor_name = process_filename(old_name)
-
                     file_handle_executor.submit(rename_and_check, png_path, new_path, anchor_name, old_name)
-
-
             except Exception as e:
                 logger.error(f'on_any_event - modified 时报错: {e}')

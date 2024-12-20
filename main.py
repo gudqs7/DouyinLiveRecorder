@@ -942,8 +942,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                     replace('[时间]', push_at))
                                     threading.Thread(
                                         target=push_message,
-                                        args=(record_name, record_url, push_content.replace(r'\n', '\n'),
-                                              "直播已结束:" + anchor_name),
+                                        args=(record_name, record_url, push_content.replace(r'\n', '\n'), "直播已结束:" + anchor_name),
                                         daemon=True
                                     ).start()
                                 start_pushed = False
@@ -962,8 +961,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                     replace('[时间]', push_at))
                                     threading.Thread(
                                         target=push_message,
-                                        args=(record_name, record_url, push_content.replace(r'\n', '\n'),
-                                              "正在直播中:" + anchor_name),
+                                        args=(record_name, record_url, push_content.replace(r'\n', '\n'), "正在直播中:" + anchor_name),
                                         daemon=True
                                     ).start()
                                 start_pushed = True
@@ -1592,6 +1590,7 @@ try:
         shutil.rmtree(pngs_path)
     if not os.path.exists(pngs_path):
         os.makedirs(pngs_path)
+
     threading.Thread(
         target=watch_pngs,
         args=(pngs_path, ''),
