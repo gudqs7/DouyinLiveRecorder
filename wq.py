@@ -3,7 +3,7 @@ config_list = [
     # 出新成绩截图
     {
         "out": '新成绩',
-        "wait_time_sec": 30,
+        "wait_time_sec": 120,
         "search_img_list": [
             {
                 "img_name": "huajie",
