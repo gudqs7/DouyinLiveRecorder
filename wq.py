@@ -3,18 +3,8 @@ config_list = [
     # 出新成绩截图
     {
         "out": '新成绩',
-        "wait_time_sec": 120,
+        "wait_time_sec": 30,
         "search_img_list": [
-            # {
-            #     "img_name": "jipo.png",
-            #     "region": [0, 0, 900, 360],
-            #     "confidence": 0.8
-            # },
-            {
-                "img_name": "sure_btn",
-                "region": [28, 673, 800, 1080],
-                "confidence": 0.8
-            },
             {
                 "img_name": "huajie",
                 "region": [28, 540, 800, 1080],
@@ -34,18 +24,8 @@ config_list = [
     # 出成绩截图
     {
         "out": '有成绩',
-        "wait_time_sec": 120,
+        "wait_time_sec": 30,
         "search_img_list": [
-            # {
-            #     "img_name": "jipo.png",
-            #     "region": [0, 0, 900, 360],
-            #     "confidence": 0.8
-            # },
-            {
-                "img_name": "sure_btn",
-                "region": [28, 673, 800, 1080],
-                "confidence": 0.8
-            },
             {
                 "img_name": "huajie",
                 "region": [28, 540, 800, 1080],
