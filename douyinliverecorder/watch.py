@@ -139,16 +139,23 @@ def check_file(new_path, author_name, old_name):
                     now_time_str = time.strftime('%Y-%m-%d')
                     out_path = f'{script_path}/downloads/{out}/{now_time_str}/{author_name}'
                     big_out_path = f'{script_path}/downloads/{out}/未处理'
+                    author_out_path = f'{script_path}/downloads/{out}/不分时间/{author_name}'
 
                     if not os.path.exists(out_path):
                         os.makedirs(out_path)
                     if not os.path.exists(big_out_path):
                         os.makedirs(big_out_path)
+                    if not os.path.exists(author_out_path):
+                        os.makedirs(author_out_path)
 
                     destination_path = os.path.join(out_path, old_name)
+                    big_destination_path = os.path.join(big_out_path, old_name)
+                    author_destination_path = os.path.join(author_out_path, old_name)
+
                     # 拷贝文件
                     shutil.copy(new_path, destination_path)
-                    shutil.copy(new_path, big_out_path)
+                    shutil.copy(new_path, big_destination_path)
+                    shutil.copy(new_path, author_destination_path)
             except Exception as e2:
                 exc_string = traceback.format_exc()
                 logger.error(f'check_file 内循环报错: {e2}\n' + exc_string + '\n\n\n')
