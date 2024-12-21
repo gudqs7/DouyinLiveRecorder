@@ -453,6 +453,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
             retry = 0
             record_quality, record_url, anchor_name = url_data
             need_record = record_quality == '录制原画'
+            only_notice = record_quality == '仅通知'
             record_quality = '原画'
             proxy_address = proxy_addr
             platform = '未知平台'
@@ -933,7 +934,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                             print(f"\r{record_name} 等待直播... ")
 
                             if start_pushed:
-                                if over_show_push and need_record:
+                                if only_notice or (over_show_push and need_record):
                                     push_content = "直播间状态更新：[直播间名称] 直播已结束！时间：[时间]"
                                     if over_push_message_text:
                                         push_content = over_push_message_text
@@ -942,7 +943,8 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                     replace('[时间]', push_at))
                                     threading.Thread(
                                         target=push_message,
-                                        args=(record_name, record_url, push_content.replace(r'\n', '\n'), "直播已结束:" + anchor_name),
+                                        args=(record_name, record_url, push_content.replace(r'\n', '\n'),
+                                              "直播已结束:" + anchor_name),
                                         daemon=True
                                     ).start()
                                 start_pushed = False
@@ -952,7 +954,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                             print(content)
 
                             if live_status_push and not start_pushed:
-                                if begin_show_push and need_record:
+                                if only_notice or (begin_show_push and need_record):
                                     push_content = "直播间状态更新：[直播间名称] 正在直播中，时间：[时间]"
                                     if begin_push_message_text:
                                         push_content = begin_push_message_text
@@ -961,13 +963,17 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                     replace('[时间]', push_at))
                                     threading.Thread(
                                         target=push_message,
-                                        args=(record_name, record_url, push_content.replace(r'\n', '\n'), "正在直播中:" + anchor_name),
+                                        args=(record_name, record_url, push_content.replace(r'\n', '\n'),
+                                              "正在直播中:" + anchor_name),
                                         daemon=True
                                     ).start()
                                 start_pushed = True
 
                             if disable_record:
                                 time.sleep(push_check_seconds)
+                                continue
+
+                            if only_notice:
                                 continue
 
                             real_url = port_info.get('record_url')
@@ -1807,7 +1813,7 @@ while True:
                 else:
                     quality, url, name = split_line
 
-                if quality not in ("录制原画", "原画", "蓝光", "超清", "高清", "标清", "流畅"):
+                if quality not in ("录制原画", "仅通知", "原画", "蓝光", "超清", "高清", "标清", "流畅"):
                     quality = '原画'
 
                 if url not in url_line_list:

@@ -138,13 +138,15 @@ def check_file(new_path, author_name, old_name):
                     # 复制图片
                     now_time_str = time.strftime('%Y-%m-%d')
                     out_path = f'{script_path}/downloads/{out}/{now_time_str}/{author_name}'
+                    big_out_path = f'{script_path}/downloads/{out}/未处理'
 
                     if not os.path.exists(out_path):
                         os.makedirs(out_path)
 
                     destination_path = os.path.join(out_path, old_name)
-                    # 拷贝单个文件
+                    # 拷贝文件
                     shutil.copy(new_path, destination_path)
+                    shutil.copy(new_path, big_out_path)
             except Exception as e2:
                 exc_string = traceback.format_exc()
                 logger.error(f'check_file 内循环报错: {e2}\n' + exc_string + '\n\n\n')
