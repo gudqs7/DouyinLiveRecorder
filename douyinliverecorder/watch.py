@@ -142,6 +142,8 @@ def check_file(new_path, author_name, old_name):
 
                     if not os.path.exists(out_path):
                         os.makedirs(out_path)
+                    if not os.path.exists(big_out_path):
+                        os.makedirs(big_out_path)
 
                     destination_path = os.path.join(out_path, old_name)
                     # 拷贝文件
