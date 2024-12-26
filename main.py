@@ -974,6 +974,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                 continue
 
                             if only_notice:
+                                time.sleep(push_check_seconds)
                                 continue
 
                             real_url = port_info.get('record_url')
