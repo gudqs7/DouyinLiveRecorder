@@ -1350,9 +1350,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 "-strftime", "1",
                                                 save_png_path
                                             ]
+                                            command.extend(watch_command)
                                             if need_record:
                                                 command.extend(record_command)
-                                            command.extend(watch_command)
 
                                             ffmpeg_command.extend(command)
                                             comment_end = check_subprocess(
