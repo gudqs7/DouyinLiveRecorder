@@ -222,6 +222,7 @@ def converts_mp4(converts_file_path: str, is_original_delete: bool = True) -> No
                 "ffmpeg", "-i", converts_file_path,
                 "-c:v", "copy",
                 "-c:a", "copy",
+                "-map_metadata", "0",
                 "-f", "mp4", converts_file_path.rsplit('.', maxsplit=1)[0] + ".mp4",
             ], stderr=subprocess.STDOUT, startupinfo=get_startup_info(os_type))
             if is_original_delete:
