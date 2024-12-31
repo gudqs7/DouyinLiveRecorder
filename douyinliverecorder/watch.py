@@ -21,6 +21,7 @@ from douyinliverecorder.utils import logger
 from msg_push import xizhi
 from wq import config_list
 from wq import xizhi_api_url
+from wq import spec_config
 
 script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
 temp_dir_path = f'{script_path}/downloads/2_temp'
@@ -48,11 +49,11 @@ def locate_0(search_img: str, big_img: str, region, confidence, print_error: boo
 def test():
     # 测试
     search_img = {
-        "img_name": "test",
-        "region": [0, 100, 900, 600],
-        "confidence": 0.99
+        "img_name": "huajie",
+        "region": [206, 191, 1102, 907],
+        "confidence": 0.70
     }
-    new_path = 'C:\\Users\\wq\\Downloads\\xl2.png'
+    new_path = 'C:\\Users\\wq\\Downloads\\11.png'
     ret_val = check(search_img, new_path, True)
     print('ret_val = ' + str(ret_val))
 
@@ -174,6 +175,83 @@ def check_file(new_path, author_name, old_name):
                 time.sleep(0.1)
 
 
+def check_file_new(new_path, author_name, old_name):
+    try:
+        wait_time_sec = spec_config["wait_time_sec"]
+        new_send_msg = spec_config["new_send_msg"]
+        has_send_msg = spec_config["has_send_msg"]
+        has = spec_config["has"]
+        new = spec_config["new"]
+
+        out = "成绩截图"
+        hit_config = hit_timestamp_config.get("成绩截图", {})
+        hit_timestamp = hit_config.get(author_name, 0)
+        time_pass = time.time() - hit_timestamp
+        if hit_timestamp != 0 and time_pass < wait_time_sec:
+            # print('之前已有截图，等待中，此截图跳过！')
+            return
+
+        if check(has, new_path):
+            hit_config_lock.acquire()
+            hit_config = hit_timestamp_config.get(out, {})
+            time_pass = time.time() - hit_timestamp
+            if hit_timestamp != 0 and time_pass < wait_time_sec:
+                return
+            hit_config[author_name] = time.time()
+            hit_timestamp_config[out] = hit_config
+            hit_config_lock.release()
+
+            send_msg_enable = has_send_msg.get("enable", False)
+            send_msg_title = has_send_msg.get("title", " 监控到新截图")
+            if send_msg_enable:
+                send_result_msg(author_name, new_path, send_msg_title)
+            copy_result(new_path, '有成绩', author_name, old_name)
+
+            if check(new, new_path):
+                send_msg_enable = new_send_msg.get("enable", False)
+                send_msg_title = new_send_msg.get("title", " 监控到新截图")
+                if send_msg_enable:
+                    send_result_msg(author_name, new_path, send_msg_title)
+                copy_result(new_path, '新成绩', author_name, old_name)
+
+    except Exception as e:
+        exc_string = traceback.format_exc()
+        logger.error(f'check_file_new 报错: {e}\n' + exc_string + '\n\n\n')
+    finally:
+        # 最后删除图片
+        while True:
+            try:
+                os.remove(new_path)
+                break
+            except Exception as e:
+                logger.error(f'remove file 报错: {e} file = {new_path}\n')
+                time.sleep(0.1)
+
+
+def copy_result(new_path, out, author_name, old_name):
+    # 复制图片
+    now_time_str = time.strftime('%Y-%m-%d')
+    out_path = f'{script_path}/downloads/{out}/{now_time_str}/{author_name}'
+    big_out_path = f'{script_path}/downloads/{out}/未处理'
+    author_out_path = f'{script_path}/downloads/{out}/不分时间/{author_name}'
+
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+    if not os.path.exists(big_out_path):
+        os.makedirs(big_out_path)
+    if not os.path.exists(author_out_path):
+        os.makedirs(author_out_path)
+
+    destination_path = os.path.join(out_path, old_name)
+    big_destination_path = os.path.join(big_out_path, old_name)
+    author_destination_path = os.path.join(author_out_path, old_name)
+
+    # 拷贝文件
+    shutil.copy(new_path, destination_path)
+    shutil.copy(new_path, big_destination_path)
+    shutil.copy(new_path, author_destination_path)
+
+
 def process_filename(filename):
     # 去除前22位字符
     new_filename = filename[22:]
@@ -192,7 +270,7 @@ def rename_and_check(png_path, new_path, anchor_name, old_name):
         except Exception as e:
             logger.error(f'重命名失败: {e}')
             time.sleep(0.35)
-    check_file(new_path, anchor_name, old_name)
+    check_file_new(new_path, anchor_name, old_name)
 
 
 class Watcher:
