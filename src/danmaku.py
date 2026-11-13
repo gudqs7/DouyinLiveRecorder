@@ -130,7 +130,7 @@ class AssStyle:
     outline: float = 0.8
     width_ratio: float = 1.2
     horizontal_gap: float = 24.0
-    float_percentage: float = 0.5
+    float_percentage: float = 1.0
     time_offset: float = 0.0
 
     @classmethod
@@ -165,7 +165,12 @@ class _Lane:
 
 
 class AssLayout:
-    """A compact Python port of danmu2ass's float-lane placement."""
+    """Full-screen rolling layout that never drops dense danmaku.
+
+    Collision-aware lane selection is used first. When every lane is busy,
+    the least-congested lane is reused immediately, allowing overlap instead
+    of dropping the event.
+    """
 
     def __init__(self, style: AssStyle) -> None:
         self.style = style
@@ -268,11 +273,9 @@ class AssLayout:
             collisions.append((delay, index))
 
         if collisions:
-            delay, index = min(collisions)
-            if delay < 1.0:
-                timestamp += delay + 0.01
-                self._set_lane(index, timestamp, length)
-                return index, timestamp
+            _delay, index = min(collisions)
+            self._set_lane(index, timestamp, length)
+            return index, timestamp
         return None, timestamp
 
     def _set_lane(self, index: int, timestamp: float, length: float) -> None:

@@ -41,6 +41,15 @@ class DanmakuTests(unittest.TestCase):
         self.assertIn("\\move(1920,0,", line)
         self.assertIn("\\c&H0000FF&", line)
 
+    def test_dense_danmaku_uses_overlap_instead_of_dropping(self):
+        layout = danmaku.AssLayout(danmaku.AssStyle())
+        events = [
+            danmaku.DanmakuEvent(index / 100, f"dense-{index}")
+            for index in range(200)
+        ]
+        lines = layout.render(events)
+        self.assertEqual(len(lines), len(events))
+
     def test_ass_base_path_removes_segment_placeholder(self):
         path = r"D:\downloads\room_2026-01-01_00-00-00_%03d.ts"
         self.assertEqual(
