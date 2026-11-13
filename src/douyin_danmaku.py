@@ -15,8 +15,7 @@ import os
 import random
 import re
 import time
-from typing import *
-from urllib.parse import unquote
+from typing import Any, Callable, Dict, List, Optional
 
 import aiohttp
 
@@ -25,9 +24,6 @@ logger = logging.getLogger(__name__)
 _configured_cookie = ''
 
 LIVE_PAGE_URL = 'https://live.douyin.com/'
-# 弹幕里的小表情列表接口，见抖音 web 端的 /aweme/v1/web/emoji/list
-EMOJI_LIST_URL = 'https://live.douyin.com/aweme/v1/web/emoji/list/'
-EMOJI_LIST_CACHE_SECONDS = 24 * 3600
 # 参考 constants.go，im/fetch 不可用时用的兜底推送地址
 WEBCAST_PUSH_URL = 'wss://webcast100-ws-web-lf.douyin.com/webcast/im/push/v2/'
 WEBCAST_SDK_VERSION = '1.0.15'
@@ -68,24 +64,6 @@ STATUS_UNKNOWN = 'ROOM_STATUS_UNKNOWN'
 
 class _LiveEnded(Exception):
     """收到直播结束控制消息"""
-
-
-# 抖音小表情列表的缓存
-_emoji_list_cache: Optional[List[dict]] = None
-_emoji_list_cache_time = 0.0
-
-_EMOJI_LIST_PARAMS = {
-    'device_platform': 'webapp', 'aid': WEBCAST_AID, 'channel': 'channel_pc_web',
-    'pc_client_type': '1', 'version_code': '170400', 'version_name': '17.4.0',
-    'cookie_enabled': 'true', 'screen_width': '1920', 'screen_height': '1080',
-    'browser_language': 'zh-CN', 'browser_platform': 'Win32', 'browser_name': 'Chrome',
-    'browser_version': f'{CHROME_MAJOR_VERSION}.0.0.0', 'browser_online': 'true',
-    'engine_name': 'Blink', 'engine_version': f'{CHROME_MAJOR_VERSION}.0.0.0',
-    'os_name': 'Windows', 'os_version': '10', 'cpu_core_num': '8', 'device_memory': '8',
-    'platform': 'PC', 'downlink': '10', 'effective_type': '4g', 'round_trip_time': '50',
-    # need_all=true 才会返回全部表情（含粉丝团/活动表情），网页端也是这么传的
-    'need_all': 'true',
-}
 
 
 def _parse_cookie_header(cookie: str) -> Dict[str, str]:
@@ -137,81 +115,6 @@ def get_douyin_cookie() -> str:
         return normalize_cookie(env_cookie)
 
     return _configured_cookie
-
-
-def get_douyin_cookie_expire_time(cookie: str = '') -> Optional[int]:
-    """从Cookie里的sid_guard解析过期时间，返回Unix秒；解析不出返回None
-
-    sid_guard示例（URL编码前）：
-    0bbf...|1790470578|5184000|Thu, 26 Nov 2026 00:56:18 GMT
-    其中 1790470578 是签发时间，5184000 是有效秒数，两者相加就是过期时间。
-    """
-    if cookie == '':
-        cookie = get_douyin_cookie()
-    fields = _parse_cookie_header(cookie)
-    sid_guard = fields.get('sid_guard', '')
-    if sid_guard == '':
-        return None
-
-    value = unquote(sid_guard)
-    parts = value.split('|')
-    if len(parts) < 3:
-        return None
-    try:
-        issued_at = int(parts[1])
-        max_age = int(parts[2])
-    except (TypeError, ValueError):
-        return None
-
-    if issued_at <= 0 or max_age <= 0:
-        return None
-    # 兼容毫秒时间戳
-    if issued_at > 10 ** 12:
-        issued_at //= 1000
-    return issued_at + max_age
-
-
-def parse_emoji_list(data: dict) -> List[dict]:
-    """把抖音表情接口的响应转成blivechat的文本表情格式"""
-    emoticons = []
-    for emoji in data.get('emoji_list') or []:
-        keyword = emoji.get('display_name') or ''
-        url_list = (emoji.get('emoji_url') or {}).get('url_list') or []
-        if keyword != '' and url_list:
-            emoticons.append({'keyword': keyword, 'url': url_list[0]})
-    return emoticons
-
-
-async def get_text_emoticons() -> List[dict]:
-    """收集抖音弹幕里的小表情，返回blivechat的文本表情格式
-
-    弹幕里的表情就是[名字]这样的纯文本，配好名字到图片的映射前端才能渲染成图片。
-    """
-    global _emoji_list_cache, _emoji_list_cache_time
-    if _emoji_list_cache is not None and time.time() - _emoji_list_cache_time < EMOJI_LIST_CACHE_SECONDS:
-        return _emoji_list_cache
-
-    try:
-        cookie = get_douyin_cookie()
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
-            headers = {
-                'User-Agent': USER_AGENT,
-                'Referer': REFERER,
-            }
-            if cookie != '':
-                headers['Cookie'] = cookie
-            async with session.get(EMOJI_LIST_URL, params=_EMOJI_LIST_PARAMS, headers=headers) as res:
-                data = await res.json(content_type=None)
-    except Exception:
-        logger.exception('fetch douyin emoji list failed')
-        return _emoji_list_cache or []
-
-    emoticons = parse_emoji_list(data)
-    if emoticons:
-        _emoji_list_cache = emoticons
-        _emoji_list_cache_time = time.time()
-        logger.info('fetched %d douyin text emoticons', len(emoticons))
-    return _emoji_list_cache or []
 
 
 # ------------------------------------------------------------------------------
@@ -437,17 +340,11 @@ def _decode_user(fields: dict) -> dict:
     user_id = pb_int(fields, 1)
     if user_id == 0:
         user_id = pb_int(fields, 2)
-    fans_club_data = pb_message(pb_message(fields, 24), 1)
     return {
         'id': str(user_id),
         'shortId': str(pb_int(fields, 2)),
         'nickname': pb_str(fields, 3),
         'avatarThumb': _decode_image(pb_message(fields, 9)),
-        'payGrade': {'level': pb_int(pb_message(fields, 23), 6)},
-        'fansClub': {'data': {
-            'clubName': pb_str(fans_club_data, 1),
-            'level': pb_int(fans_club_data, 2),
-        }},
     }
 
 
@@ -458,20 +355,6 @@ def _decode_common(fields: dict) -> dict:
         'roomId': str(pb_int(fields, 3)),
         'createTime': str(pb_int(fields, 4)),
     }
-
-
-def _decode_piece(fields: dict) -> dict:
-    piece = {'type': pb_int(fields, 1)}
-    string_value = pb_str(fields, 11)
-    if string_value != '':
-        piece['stringValue'] = string_value
-    schema_key = pb_str(fields, 100)
-    if schema_key != '':
-        piece['schemaKey'] = schema_key
-    image = pb_message(pb_message(fields, 25), 1)
-    if image:
-        piece['imageValue'] = {'image': _decode_image(image)}
-    return piece
 
 
 def decode_im_message(method: str, payload: bytes) -> Optional[dict]:
@@ -485,17 +368,11 @@ def decode_im_message(method: str, payload: bytes) -> Optional[dict]:
 
 
 def _decode_chat_message(fields: dict) -> dict:
-    message = {
+    return {
         'common': _decode_common(pb_message(fields, 1)),
         'user': _decode_user(pb_message(fields, 2)),
         'content': pb_str(fields, 3),
-        'eventTime': str(pb_int(fields, 15)),
     }
-    # 合成(融合)表情、富文本内容放在rtf_content里
-    rtf_content = pb_message(fields, 41) or pb_message(fields, 40)
-    if rtf_content:
-        message['rtfContent'] = {'pieces': [_decode_piece(piece) for piece in pb_messages(rtf_content, 4)]}
-    return message
 
 
 def _decode_emoji_chat_message(fields: dict) -> dict:
@@ -503,67 +380,6 @@ def _decode_emoji_chat_message(fields: dict) -> dict:
         'common': _decode_common(pb_message(fields, 1)),
         'user': _decode_user(pb_message(fields, 2)),
         'defaultContent': pb_str(fields, 5),
-        'emojiContent': {'pieces': [_decode_piece(piece) for piece in pb_messages(pb_message(fields, 4), 4)]},
-    }
-
-
-def _decode_gift_message(fields: dict) -> dict:
-    gift = pb_message(fields, 15)
-    gift_id = pb_int(fields, 2) or pb_int(gift, 5)
-    return {
-        'common': _decode_common(pb_message(fields, 1)),
-        'user': _decode_user(pb_message(fields, 7)),
-        'giftId': str(gift_id),
-        'repeatCount': str(pb_int(fields, 5)),
-        'comboCount': str(pb_int(fields, 6)),
-        # 抖音礼物proto里的连击结束、组合id、总数量；部分端侧消息只有其中的一部分
-        'repeatEnd': str(pb_int(fields, 9)),
-        'groupId': str(pb_int(fields, 11)),
-        'totalCount': str(pb_int(fields, 14)),
-        'count': str(pb_int(fields, 14) or pb_int(fields, 44)),
-        'gift': {
-            'id': str(pb_int(gift, 5) or gift_id),
-            'name': pb_str(gift, 16) or pb_str(gift, 2),
-            'diamondCount': pb_int(gift, 12),
-            'image': _decode_image(pb_message(gift, 1)),
-            'icon': _decode_image(pb_message(gift, 21)),
-        },
-    }
-
-
-def _first_nonempty_image(*images: dict) -> dict:
-    for image in images:
-        if image.get('urlList'):
-            return image
-    return {'urlList': []}
-
-
-def _decode_light_gift_message(fields: dict) -> dict:
-    """新版直播间的轻礼物消息，用户信息在 common.user 里。"""
-    common = pb_message(fields, 1)
-    gift_info = pb_message(fields, 7)
-    gift_struct = pb_message(fields, 13)
-    return {
-        'common': _decode_common(common),
-        'user': _decode_user(pb_message(common, 15)),
-        'senderId': str(pb_int(fields, 5)),
-        'giftId': str(pb_int(gift_info, 1) or pb_int(gift_struct, 5)),
-        'repeatCount': str(pb_int(fields, 3)),
-        'comboCount': str(pb_int(fields, 4)),
-        'count': str(pb_int(fields, 10)),
-        'gift': {
-            'id': str(pb_int(gift_struct, 5) or pb_int(gift_info, 1)),
-            'name': pb_str(gift_struct, 16) or pb_str(gift_struct, 2),
-            'diamondCount': pb_int(gift_info, 3) or pb_int(gift_struct, 12),
-            'image': _first_nonempty_image(
-                _decode_image(pb_message(gift_struct, 1)),
-                _decode_image(pb_message(gift_info, 2)),
-            ),
-            'icon': _first_nonempty_image(
-                _decode_image(pb_message(gift_struct, 21)),
-                _decode_image(pb_message(gift_info, 2)),
-            ),
-        },
     }
 
 
@@ -574,40 +390,9 @@ def _decode_control_message(fields: dict) -> dict:
     }
 
 
-def _decode_member_message(fields: dict) -> dict:
-    """只取用户资料，用于给不带昵称的轻礼物补齐昵称/头像"""
-    return {
-        'common': _decode_common(pb_message(fields, 1)),
-        'user': _decode_user(pb_message(fields, 2)),
-    }
-
-
-# def _decode_fansclub_message(fields: dict) -> dict:
-#     """粉丝团消息按“点亮粉丝团”礼物展示"""
-#     return {
-#         'common': _decode_common(pb_message(fields, 1)),
-#         'user': _decode_user(pb_message(fields, 4)),
-#         'gift': {
-#             'id': 0,
-#             'name': '点亮粉丝团',
-#             'diamondCount': 0,
-#             'image': {'urlList': [
-#                 'https://p11-webcast.douyinpic.com/img/webcast/5ddfcd51beaa7cad1294a4e517bc80fb.png~tplv-obj.png'
-#             ]},
-#             'icon': {},
-#         },
-#         'repeatCount': '1',
-#         'count': '1',
-#     }
-
-
 _MESSAGE_DECODERS: Dict[str, Callable[[dict], dict]] = {
     'WebcastChatMessage': _decode_chat_message,
     'WebcastEmojiChatMessage': _decode_emoji_chat_message,
-    'WebcastGiftMessage': _decode_gift_message,
-    'WebcastLightGiftMessage': _decode_light_gift_message,
-#     'WebcastFansclubMessage': _decode_fansclub_message,
-    'WebcastMemberMessage': _decode_member_message,
     'WebcastControlMessage': _decode_control_message,
 }
 
@@ -737,9 +522,6 @@ class DouyinLiveClient:
         self._cursor = ''
         self._internal_ext = ''
         self._push_url = ''
-        # 见过的用户资料，轻礼物只带发送者 id 时靠它补昵称/头像
-        self._user_cache: Dict[str, dict] = {}
-
         # 上一次上报的直播状态，避免重复提示
         self.last_status_code: Optional[str] = None
 
@@ -1103,7 +885,6 @@ class DouyinLiveClient:
             message = decode_im_message(method, pb_bytes(message_fields, 2))
             if message is None:
                 continue
-            self._remember_douyin_user(message)
             if method == 'WebcastControlMessage' and message.get('action') == CONTROL_ACTION_LIVE_END:
                 self.send_live_status(STATUS_ENDED, '抖音直播间已下播，等待重新开播', False)
                 raise _LiveEnded()
@@ -1113,21 +894,6 @@ class DouyinLiveClient:
                 except Exception:
                     logger.exception('room=%s handle douyin message failed, method=%s', self.room_key, method)
         return True
-
-    def _remember_douyin_user(self, message: dict):
-        """缓存用户资料；轻礼物没有昵称时用发送者 id 回填"""
-        user = message.get('user')
-        if isinstance(user, dict) and user.get('nickname'):
-            self._user_cache[str(user.get('id'))] = user
-            if len(self._user_cache) > 2000:
-                self._user_cache.pop(next(iter(self._user_cache)))
-            return
-        sender_id = str(message.get('senderId') or '')
-        if sender_id in ('', '0'):
-            return
-        cached = self._user_cache.get(sender_id)
-        if cached is not None:
-            message['user'] = cached
 
     def _apply_response_state(self, response: dict):
         if pb_str(response, 2) != '':

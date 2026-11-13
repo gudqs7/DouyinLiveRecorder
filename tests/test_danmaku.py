@@ -1,7 +1,5 @@
-import struct
 import time
 import unittest
-import zlib
 
 from src import danmaku
 
@@ -21,18 +19,6 @@ class DanmakuTests(unittest.TestCase):
         self.assertIsNotNone(value)
         self.assertGreaterEqual(value, 12.5)
         self.assertLess(value, 14.6)
-
-    def test_packet_parser_handles_zlib_messages(self):
-        message = (
-            b'{"cmd":"DANMU_MSG","info":[[0,1,25,16777215],'
-            b'"hello",[123,"user"]]}'
-        )
-        inner = _packet(version=0, operation=5, body=message)
-        outer = _packet(version=2, operation=5, body=zlib.compress(inner))
-        packets = danmaku._parse_bilibili_packets(outer)
-        self.assertEqual(len(packets), 1)
-        self.assertEqual(packets[0][0], 5)
-        self.assertEqual(packets[0][1], message)
 
     def test_ass_layout_writes_rolling_dialogue(self):
         layout = danmaku.AssLayout(danmaku.AssStyle())
@@ -56,12 +42,6 @@ class DanmakuTests(unittest.TestCase):
             danmaku.ass_base_path(path),
             r"D:\downloads\room_2026-01-01_00-00-00",
         )
-
-
-def _packet(version: int, operation: int, body: bytes) -> bytes:
-    header = struct.pack(">IHHII", 16 + len(body), 16, version, operation, 1)
-    return header + body
-
 
 if __name__ == "__main__":
     unittest.main()

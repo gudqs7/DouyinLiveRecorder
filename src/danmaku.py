@@ -10,23 +10,18 @@ from __future__ import annotations
 
 import asyncio
 import glob
-import json
 import logging
 import math
 import os
 import queue
 import re
-import struct
 import subprocess
 import threading
 import time
-import zlib
 from dataclasses import dataclass
 from typing import Iterable, Optional
-from urllib.parse import urlparse
 
 import requests
-import websocket
 
 from . import douyin_danmaku
 
@@ -34,8 +29,7 @@ logger = logging.getLogger(__name__)
 
 BILIBILI_ROOM_PATTERN = re.compile(r"live\.bilibili\.com/(\d+)")
 DOUYIN_ROOM_PATTERN = re.compile(r"live\.douyin\.com/(\d+)")
-PROXY_SCHEME_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
-BILIBILI_USER_AGENT = (
+REQUEST_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 )
@@ -52,30 +46,6 @@ def format_ass_time(seconds: float) -> str:
 def ass_base_path(save_file_path: str) -> str:
     base_path = os.path.splitext(save_file_path)[0]
     return base_path.replace("_%03d", "")
-
-
-def _normalise_proxy(proxy: str) -> Optional[str]:
-    if not proxy or not proxy.strip():
-        return None
-    proxy = proxy.strip()
-    if not PROXY_SCHEME_PATTERN.match(proxy):
-        proxy = "http://" + proxy
-    return proxy
-
-
-def _websocket_proxy_kwargs(proxy: Optional[str]) -> dict:
-    if not proxy:
-        return {}
-    parsed = urlparse(proxy)
-    if not parsed.hostname or not parsed.port:
-        return {}
-    kwargs = {
-        "http_proxy_host": parsed.hostname,
-        "http_proxy_port": parsed.port,
-    }
-    if parsed.username is not None:
-        kwargs["http_proxy_auth"] = (parsed.username, parsed.password or "")
-    return kwargs
 
 
 class MediaClock:
@@ -315,13 +285,11 @@ class DanmakuRecorder:
         room_url: str,
         save_file_path: str,
         cookie: str,
-        proxy: Optional[str],
         style: AssStyle,
     ) -> None:
         self.platform = platform
         self.room_url = room_url
         self.cookie = cookie or ""
-        self.proxy = _normalise_proxy(proxy or "")
         self.style = style
         self.media_clock = MediaClock(style.time_offset)
         self.master_path = ass_base_path(save_file_path) + ".ass"
@@ -449,7 +417,6 @@ class DanmakuRecorder:
                 provider = BilibiliDanmakuProvider(
                     self.room_url,
                     self.cookie,
-                    self.proxy,
                     self.add,
                     self._stop_event,
                 )
@@ -458,7 +425,6 @@ class DanmakuRecorder:
                 provider = DouyinDanmakuProvider(
                     self.room_url,
                     self.cookie,
-                    self.proxy,
                     self.add,
                     self._stop_event,
                 )
@@ -498,7 +464,6 @@ class BilibiliDanmakuProvider:
         self,
         room_url: str,
         cookie: str,
-        proxy: Optional[str],
         emit,
         stop_event: threading.Event,
     ) -> None:
@@ -507,7 +472,6 @@ class BilibiliDanmakuProvider:
             raise ValueError(f"cannot parse Bilibili room id: {room_url}")
         self.room_id = match.group(1)
         self.cookie = cookie
-        self.proxy = proxy
         self.emit = emit
         self.stop_event = stop_event
 
@@ -517,8 +481,7 @@ class BilibiliDanmakuProvider:
             import blivedm
             import blivedm.models.web as web_models
         except ImportError:
-            logger.warning("blivedm is unavailable, falling back to legacy Bilibili client")
-            self._run_legacy()
+            logger.error("blivedm is unavailable, cannot capture Bilibili danmaku")
             return
 
         owner = self
@@ -560,142 +523,17 @@ class BilibiliDanmakuProvider:
 
         asyncio.run(run_client())
 
-    def _run_legacy(self) -> None:
-        retries = 0
-        while not self.stop_event.is_set():
-            try:
-                self._connect_once()
-                retries = 0
-            except Exception as exc:
-                if self.stop_event.is_set():
-                    return
-                logger.warning("Bilibili danmaku reconnect after error: %s", exc)
-            retries += 1
-            self.stop_event.wait(min(1 + retries * 2, 20))
-
-    def _connect_once(self) -> None:
-        conf = self._get_conf()
-        token = conf.get("token", "")
-        hosts = conf.get("host_server_list") or []
-        host = hosts[0]["host"] if hosts else conf.get("host", "broadcastlv.chat.bilibili.com")
-        port = 443
-        if hosts:
-            host = hosts[0].get("host", host)
-            port = int(hosts[0].get("wss_port", 443))
-        url = f"wss://{host}:{port}/sub"
-        headers = [
-            f"User-Agent: {BILIBILI_USER_AGENT}",
-            "Origin: https://live.bilibili.com",
-            f"Referer: https://live.bilibili.com/{self.room_id}",
-        ]
-        if self.cookie:
-            headers.append(f"Cookie: {self.cookie}")
-        ws = websocket.create_connection(
-            url,
-            header=headers,
-            timeout=10,
-            **_websocket_proxy_kwargs(self.proxy),
-        )
-        try:
-            ws.settimeout(1.0)
-            auth = {
-                "uid": 0,
-                "roomid": int(self.room_id),
-                "protover": 3,
-                "platform": "web",
-                "type": 2,
-                "key": token,
-            }
-            body = json.dumps(auth, separators=(",", ":")).encode("utf-8")
-            ws.send(_pack_bilibili_packet(7, body), opcode=websocket.ABNF.OPCODE_BINARY)
-            last_heartbeat = 0.0
-            while not self.stop_event.is_set():
-                now = time.monotonic()
-                if now - last_heartbeat >= 30:
-                    heartbeat = _pack_bilibili_packet(2, b"[object Object]")
-                    ws.send(heartbeat, opcode=websocket.ABNF.OPCODE_BINARY)
-                    last_heartbeat = now
-                try:
-                    payload = ws.recv()
-                except websocket.WebSocketTimeoutException:
-                    continue
-                except websocket.WebSocketConnectionClosedException:
-                    return
-                if isinstance(payload, bytes):
-                    self._handle_packet(payload)
-        finally:
-            ws.close()
-
-    def _get_conf(self) -> dict:
-        headers = {
-            "User-Agent": BILIBILI_USER_AGENT,
-            "Referer": f"https://live.bilibili.com/{self.room_id}",
-        }
-        if self.cookie:
-            headers["Cookie"] = self.cookie
-        proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
-        response = requests.get(
-            "https://api.live.bilibili.com/room/v1/Danmu/getConf",
-            params={"room_id": self.room_id, "platform": "pc", "player": "web"},
-            headers=headers,
-            proxies=proxies,
-            timeout=15,
-        )
-        response.raise_for_status()
-        data = response.json()
-        if data.get("code") != 0:
-            raise RuntimeError(f"Bilibili danmu getConf failed: {data}")
-        return data["data"]
-
-    def _handle_packet(self, payload: bytes) -> None:
-        for operation, body in _parse_bilibili_packets(payload):
-            if operation in (8,):
-                try:
-                    reply = json.loads(body.decode("utf-8", "replace"))
-                except ValueError:
-                    continue
-                if reply.get("code") not in (0, None):
-                    raise RuntimeError(f"Bilibili danmaku auth failed: {reply}")
-                continue
-            if operation != 5:
-                continue
-            try:
-                data = json.loads(body.decode("utf-8", "replace"))
-            except ValueError:
-                continue
-            command = data.get("cmd", "")
-            if command.startswith("DANMU_MSG"):
-                info = data.get("info") or []
-                if len(info) < 2:
-                    continue
-                content = info[1]
-                meta = info[0] if info[0] else []
-                color = int(meta[3]) if len(meta) > 3 and str(meta[3]).isdigit() else 0xFFFFFF
-                user = info[2] if len(info) > 2 and info[2] else []
-                uid = str(user[0]) if user else "0"
-                source_time = str(meta[4]) if len(meta) > 4 else str(time.time_ns())
-                message_id = f"{uid}:{source_time}:{content}"
-                self.emit(content, color, f"bili:{message_id}")
-            elif command.startswith("SUPER_CHAT_MESSAGE"):
-                message = data.get("data") or {}
-                content = message.get("message", "")
-                color = 0x2A9DF4
-                message_id = str(message.get("id") or message.get("message_id") or content)
-                self.emit(content, color, f"bili-sc:{message_id}")
-
 
 class DouyinDanmakuProvider:
     def __init__(
         self,
         room_url: str,
         cookie: str,
-        proxy: Optional[str],
         emit,
         stop_event: threading.Event,
     ) -> None:
         self.room_url = room_url
         self.cookie = cookie
-        self.proxy = proxy
         self.emit = emit
         self.stop_event = stop_event
 
@@ -711,13 +549,11 @@ class DouyinDanmakuProvider:
         match = DOUYIN_ROOM_PATTERN.search(self.room_url)
         if match:
             return match.group(1)
-        headers = {"User-Agent": BILIBILI_USER_AGENT}
-        proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+        headers = {"User-Agent": REQUEST_USER_AGENT}
         try:
             response = requests.get(
                 self.room_url,
                 headers=headers,
-                proxies=proxies,
                 timeout=15,
                 allow_redirects=True,
             )
@@ -764,39 +600,6 @@ class _DouyinDanmakuHandler:
     def on_client_stopped(self, _client, exception: Optional[Exception]) -> None:
         if exception is not None:
             logger.warning("Douyin danmaku client stopped: %s", exception)
-
-
-def _pack_bilibili_packet(operation: int, body: bytes) -> bytes:
-    header = struct.pack(">IHHII", 16 + len(body), 16, 1, operation, 1)
-    return header + body
-
-
-def _parse_bilibili_packets(payload: bytes) -> list[tuple[int, bytes]]:
-    packets: list[tuple[int, bytes]] = []
-    offset = 0
-    while offset + 16 <= len(payload):
-        packet_len, header_len, version, operation, _sequence = struct.unpack(
-            ">IHHII", payload[offset:offset + 16]
-        )
-        if packet_len < header_len or offset + packet_len > len(payload):
-            break
-        body = payload[offset + header_len:offset + packet_len]
-        offset += packet_len
-        if version == 2:
-            try:
-                packets.extend(_parse_bilibili_packets(zlib.decompress(body)))
-            except zlib.error:
-                logger.warning("decompress Bilibili danmaku packet failed")
-        elif version == 3:
-            try:
-                import brotli
-
-                packets.extend(_parse_bilibili_packets(brotli.decompress(body)))
-            except (ImportError, Exception):
-                logger.warning("decompress brotli Bilibili danmaku packet failed")
-        else:
-            packets.append((operation, body))
-    return packets
 
 
 def _clean_ass_text(text: str) -> str:

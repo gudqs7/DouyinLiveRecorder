@@ -5,7 +5,7 @@ WORKDIR /app
 COPY . /app
 
 RUN apt-get update && \
-    apt-get install -y curl gnupg && \
+    apt-get install -y curl git gnupg && \
     curl -sL https://deb.nodesource.com/setup_20.x  | bash - && \
     apt-get install -y nodejs
 

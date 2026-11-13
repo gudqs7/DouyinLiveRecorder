@@ -450,7 +450,6 @@ def create_danmaku_recorder(
         room_url=record_url,
         save_file_path=save_file_path,
         cookie=cookie,
-        proxy=globals().get('proxy_addr', None),
         style=style,
     )
     danmaku_recorders[record_name] = recorder
