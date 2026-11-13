@@ -509,6 +509,55 @@ class BilibiliDanmakuProvider:
         self.stop_event = stop_event
 
     def run(self) -> None:
+        try:
+            import aiohttp
+            import blivedm
+            import blivedm.models.web as web_models
+        except ImportError:
+            logger.warning("blivedm is unavailable, falling back to legacy Bilibili client")
+            self._run_legacy()
+            return
+
+        owner = self
+
+        class Handler(blivedm.BaseHandler):
+            def _on_danmaku(handler_self, _client, message: web_models.DanmakuMessage):
+                content = message.msg or ""
+                message_id = f"{message.uid}:{message.timestamp}:{content}"
+                owner.emit(
+                    content,
+                    message.color or 0xFFFFFF,
+                    f"bili:{message_id}",
+                )
+
+            def _on_super_chat(handler_self, _client, message: web_models.SuperChatMessage):
+                content = message.message or ""
+                message_id = message.id or f"{message.uid}:{message.start_time}:{content}"
+                owner.emit(
+                    content,
+                    0x2A9DF4,
+                    f"bili-sc:{message_id}",
+                )
+
+        async def run_client():
+            headers = {"Cookie": self.cookie} if self.cookie else None
+            async with aiohttp.ClientSession(headers=headers) as session:
+                client = blivedm.BLiveClient(
+                    int(self.room_id),
+                    session=session,
+                    heartbeat_interval=10,
+                )
+                client.set_handler(Handler())
+                client.start()
+                try:
+                    while not self.stop_event.is_set():
+                        await asyncio.sleep(0.5)
+                finally:
+                    await client.stop_and_close()
+
+        asyncio.run(run_client())
+
+    def _run_legacy(self) -> None:
         retries = 0
         while not self.stop_event.is_set():
             try:
@@ -549,7 +598,7 @@ class BilibiliDanmakuProvider:
             auth = {
                 "uid": 0,
                 "roomid": int(self.room_id),
-                "protover": 2,
+                "protover": 3,
                 "platform": "web",
                 "type": 2,
                 "key": token,
@@ -564,15 +613,12 @@ class BilibiliDanmakuProvider:
                     ws.send(heartbeat, opcode=websocket.ABNF.OPCODE_BINARY)
                     last_heartbeat = now
                 try:
-                    opcode, payload = ws.recv_data()
+                    payload = ws.recv()
                 except websocket.WebSocketTimeoutException:
                     continue
-                if opcode in (websocket.ABNF.OPCODE_CLOSE, websocket.ABNF.OPCODE_PING):
-                    if opcode == websocket.ABNF.OPCODE_PING:
-                        ws.pong(payload)
-                        continue
+                except websocket.WebSocketConnectionClosedException:
                     return
-                if opcode == websocket.ABNF.OPCODE_BINARY:
+                if isinstance(payload, bytes):
                     self._handle_packet(payload)
         finally:
             ws.close()
@@ -624,7 +670,8 @@ class BilibiliDanmakuProvider:
                 color = int(meta[3]) if len(meta) > 3 and str(meta[3]).isdigit() else 0xFFFFFF
                 user = info[2] if len(info) > 2 and info[2] else []
                 uid = str(user[0]) if user else "0"
-                message_id = str(meta[5]) if len(meta) > 5 else f"{uid}:{content}:{time.time()}"
+                source_time = str(meta[4]) if len(meta) > 4 else str(time.time_ns())
+                message_id = f"{uid}:{source_time}:{content}"
                 self.emit(content, color, f"bili:{message_id}")
             elif command.startswith("SUPER_CHAT_MESSAGE"):
                 message = data.get("data") or {}
