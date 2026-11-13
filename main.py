@@ -27,7 +27,7 @@ from urllib.error import URLError, HTTPError
 from typing import Any
 import configparser
 import httpx
-from src import spider, stream
+from src import spider, stream, danmaku
 from src.proxy import ProxyDetector
 from src.utils import logger
 from src import utils
@@ -65,6 +65,7 @@ not_record_list = []
 start_display_time = datetime.datetime.now()
 global_proxy = False
 recording_time_list = {}
+danmaku_recorders = {}
 script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
 config_file = f'{script_path}/config/config.ini'
 url_config_file = f'{script_path}/config/URL_config.ini'
@@ -105,6 +106,8 @@ def display_info() -> None:
                 print("录制分段开启: 否", end=" | ")
             if create_time_file:
                 print("是否生成时间文件: 是", end=" | ")
+            if record_danmaku:
+                print("是否录制B站/抖音弹幕到ASS: 是", end=" | ")
             print(f"录制视频质量为: {video_record_quality}", end=" | ")
             print(f"录制视频格式为: {video_save_type}", end=" | ")
             print(f"目前瞬时错误数为: {error_count}", end=" | ")
@@ -417,12 +420,103 @@ def direct_download_stream(source_url: str, save_path: str, record_name: str, li
         return False
 
 
+def create_danmaku_recorder(
+        record_name: str,
+        record_url: str,
+        platform: str,
+        save_file_path: str,
+) -> danmaku.DanmakuRecorder | None:
+    if not globals().get('record_danmaku', False):
+        return None
+    if platform not in ('B站直播', '抖音直播'):
+        return None
+    if '音频' in globals().get('video_save_type', ''):
+        return None
+
+    old_recorder = danmaku_recorders.pop(record_name, None)
+    if old_recorder is not None:
+        old_recorder.finish()
+
+    style = danmaku.AssStyle.from_values(
+        font=globals().get('danmaku_font', 'Microsoft YaHei'),
+        font_size=globals().get('danmaku_font_size', 42),
+        duration=globals().get('danmaku_duration', 15.0),
+        opacity=globals().get('danmaku_opacity', 0.7),
+        time_offset=globals().get('danmaku_time_offset', 0.0),
+    )
+    cookie = globals().get('bili_cookie', '') if platform == 'B站直播' else globals().get('dy_cookie', '')
+    recorder = danmaku.DanmakuRecorder(
+        platform=platform,
+        room_url=record_url,
+        save_file_path=save_file_path,
+        cookie=cookie,
+        proxy=globals().get('proxy_addr', None),
+        style=style,
+    )
+    danmaku_recorders[record_name] = recorder
+    return recorder
+
+
+def finish_danmaku_recorder(record_name: str, segment_pattern: str | None = None) -> None:
+    recorder = danmaku_recorders.pop(record_name, None)
+    if recorder is None:
+        return
+    fallback_split_time = float(globals().get('split_time', 1800))
+    recorder.finish(segment_pattern, fallback_split_time)
+
+
+def _consume_ffmpeg_output(process: subprocess.Popen, recorder: danmaku.DanmakuRecorder | None) -> None:
+    if process.stdout is None:
+        return
+    clock = recorder.media_clock if recorder is not None else None
+    progress_keys = {
+        'bitrate', 'drop_frames', 'dup_frames', 'fps', 'frame', 'out_time',
+        'out_time_ms', 'out_time_us', 'progress', 'speed', 'stream_0_0_q',
+        'total_size'
+    }
+    try:
+        for raw_line in iter(process.stdout.readline, b''):
+            text = raw_line.decode('utf-8', 'replace').strip()
+            if not text:
+                continue
+            if '=' in text:
+                key, value = text.split('=', maxsplit=1)
+                if key in progress_keys:
+                    if clock is not None and key == 'out_time_us' and value.isdigit():
+                        clock.update(int(value) / 1_000_000)
+                    continue
+            if 'error' in text.lower() or 'failed' in text.lower():
+                logger.warning(f"ffmpeg: {text}")
+    finally:
+        try:
+            process.stdout.close()
+        except OSError:
+            pass
+
+
 def check_subprocess(record_name: str, record_url: str, ffmpeg_command: list, save_type: str,
                      script_command: str | None = None) -> bool:
     save_file_path = ffmpeg_command[-1]
+    recorder = danmaku_recorders.get(record_name)
+    segment_pattern = save_file_path if split_video_by_time else None
+    if recorder is not None:
+        recorder.start()
+    command = list(ffmpeg_command)
+    command[1:1] = ['-progress', 'pipe:1', '-nostats']
     process = subprocess.Popen(
-        ffmpeg_command, stdin=subprocess.PIPE, stderr=subprocess.STDOUT, startupinfo=get_startup_info(os_type)
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        startupinfo=get_startup_info(os_type)
     )
+    output_thread = threading.Thread(
+        target=_consume_ffmpeg_output,
+        args=(process, recorder),
+        daemon=True,
+        name=f'ffmpeg-progress-{Path(save_file_path).name}'
+    )
+    output_thread.start()
 
     subs_file_path = save_file_path.rsplit('.', maxsplit=1)[0]
     subs_thread_name = f'subs_{Path(subs_file_path).name}'
@@ -445,18 +539,22 @@ def check_subprocess(record_name: str, record_url: str, ffmpeg_command: list, sa
             else:
                 process.send_signal(signal.SIGINT)
             process.wait()
+            output_thread.join(timeout=3)
+            finish_danmaku_recorder(record_name, segment_pattern)
             return True
         time.sleep(1)
 
+    output_thread.join(timeout=3)
     return_code = process.returncode
     stop_time = time.strftime('%Y-%m-%d %H:%M:%S')
+    finish_danmaku_recorder(record_name, segment_pattern)
     if return_code == 0:
         if converts_to_mp4 and save_type == 'TS':
             if split_video_by_time:
                 file_paths = utils.get_file_paths(os.path.dirname(save_file_path))
                 prefix = os.path.basename(save_file_path).rsplit('_', maxsplit=1)[0]
                 for path in file_paths:
-                    if prefix in path:
+                    if prefix in path and path.lower().endswith('.ts'):
                         threading.Thread(target=converts_mp4, args=(path, delete_origin_file)).start()
             else:
                 threading.Thread(target=converts_mp4, args=(save_file_path, delete_origin_file)).start()
@@ -1288,6 +1386,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                     save_file_path,
                                                 ]
 
+                                        create_danmaku_recorder(
+                                            record_name, record_url, platform, save_file_path
+                                        )
                                         ffmpeg_command.extend(command)
                                         comment_end = check_subprocess(
                                             record_name,
@@ -1379,6 +1480,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 "-f", "flv",
                                                 "{path}".format(path=save_file_path),
                                             ]
+                                        create_danmaku_recorder(
+                                            record_name, record_url, platform, save_file_path
+                                        )
                                         ffmpeg_command.extend(command)
 
                                         comment_end = check_subprocess(
@@ -1453,6 +1557,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 "-f", "matroska",
                                                 "{path}".format(path=save_file_path),
                                             ]
+                                        create_danmaku_recorder(
+                                            record_name, record_url, platform, save_file_path
+                                        )
                                         ffmpeg_command.extend(command)
 
                                         comment_end = check_subprocess(
@@ -1501,6 +1608,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 save_file_path,
                                             ]
 
+                                        create_danmaku_recorder(
+                                            record_name, record_url, platform, save_file_path
+                                        )
                                         ffmpeg_command.extend(command)
                                         comment_end = check_subprocess(
                                             record_name,
@@ -1537,6 +1647,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 save_file_path,
                                             ]
 
+                                            create_danmaku_recorder(
+                                                record_name, record_url, platform, save_file_path
+                                            )
                                             ffmpeg_command.extend(command)
                                             comment_end = check_subprocess(
                                                 record_name,
@@ -1550,7 +1663,7 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                     file_paths = utils.get_file_paths(os.path.dirname(save_file_path))
                                                     prefix = os.path.basename(save_file_path).rsplit('_', maxsplit=1)[0]
                                                     for path in file_paths:
-                                                        if prefix in path:
+                                                        if prefix in path and path.lower().endswith('.ts'):
                                                             try:
                                                                 threading.Thread(
                                                                     target=converts_mp4,
@@ -1581,6 +1694,9 @@ def start_record(url_data: tuple, count_variable: int = -1) -> None:
                                                 save_file_path,
                                             ]
 
+                                            create_danmaku_recorder(
+                                                record_name, record_url, platform, save_file_path
+                                            )
                                             ffmpeg_command.extend(command)
                                             comment_end = check_subprocess(
                                                 record_name,
@@ -1824,6 +1940,12 @@ while True:
     converts_to_h264 = options.get(read_config_value(config, '录制设置', 'mp4格式重新编码为h264', "否"), False)
     delete_origin_file = options.get(read_config_value(config, '录制设置', '追加格式后删除原文件', "否"), False)
     create_time_file = options.get(read_config_value(config, '录制设置', '生成时间字幕文件', "否"), False)
+    record_danmaku = options.get(read_config_value(config, '录制设置', '录制弹幕到ASS(是/否)', "是"), True)
+    danmaku_font = read_config_value(config, '录制设置', '弹幕字幕字体', "Microsoft YaHei")
+    danmaku_font_size = int(read_config_value(config, '录制设置', '弹幕字幕字号', 42))
+    danmaku_duration = float(read_config_value(config, '录制设置', '弹幕字幕显示时长(秒)', 15.0))
+    danmaku_opacity = float(read_config_value(config, '录制设置', '弹幕字幕不透明度(0-1)', 0.7))
+    danmaku_time_offset = float(read_config_value(config, '录制设置', '弹幕字幕时间偏移(秒)', 0.0))
     is_run_script = options.get(read_config_value(config, '录制设置', '是否录制完成后执行自定义脚本', "否"), False)
     custom_script = read_config_value(config, '录制设置', '自定义脚本执行命令', "") if is_run_script else None
     enable_proxy_platform = read_config_value(
