@@ -23,7 +23,8 @@ from typing import Iterable, Optional
 
 import requests
 
-from . import douyin_danmaku
+from . import blivedm, douyin_danmaku
+from .blivedm.models import web as blivedm_models
 
 logger = logging.getLogger(__name__)
 
@@ -476,18 +477,12 @@ class BilibiliDanmakuProvider:
         self.stop_event = stop_event
 
     def run(self) -> None:
-        try:
-            import aiohttp
-            import blivedm
-            import blivedm.models.web as web_models
-        except ImportError:
-            logger.error("blivedm is unavailable, cannot capture Bilibili danmaku")
-            return
+        import aiohttp
 
         owner = self
 
         class Handler(blivedm.BaseHandler):
-            def _on_danmaku(handler_self, _client, message: web_models.DanmakuMessage):
+            def _on_danmaku(handler_self, _client, message: blivedm_models.DanmakuMessage):
                 content = message.msg or ""
                 message_id = f"{message.uid}:{message.timestamp}:{content}"
                 owner.emit(
@@ -496,7 +491,7 @@ class BilibiliDanmakuProvider:
                     f"bili:{message_id}",
                 )
 
-            def _on_super_chat(handler_self, _client, message: web_models.SuperChatMessage):
+            def _on_super_chat(handler_self, _client, message: blivedm_models.SuperChatMessage):
                 content = message.message or ""
                 message_id = message.id or f"{message.uid}:{message.start_time}:{content}"
                 owner.emit(
