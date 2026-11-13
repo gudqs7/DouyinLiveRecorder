@@ -867,9 +867,14 @@ class DouyinLiveClient:
             html = (await res.read()).decode('utf-8', 'replace')
 
         room = parse_live_page(html)
-        if room is None or room['user_unique_id'] == '' or (room['room_id'] == '' and room['live_name'] == ''):
+        if room is None or (room['room_id'] == '' and room['live_name'] == ''):
             self.send_live_status(STATUS_UNKNOWN, '暂时无法获取抖音直播间信息，请检查房间号，重试中', False)
             return None
+
+        if room['user_unique_id'] == '':
+            # 抖音新版直播页不再总是下发 user_unique_id。匿名 Web 客户端
+            # 可以自行生成一个稳定的 19 位用户标识参与签名。
+            room['user_unique_id'] = str(random.randrange(10 ** 18, 10 ** 19))
 
         self._room_id = room['room_id']
         self._user_unique_id = room['user_unique_id']
